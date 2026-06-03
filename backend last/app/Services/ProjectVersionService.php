@@ -5,6 +5,7 @@ namespace App\Services;
 use Carbon\Carbon;
 use App\Models\Project;
 use App\Models\ProjectVersion;
+use App\Models\ProjectActivity; // 🎯 استدعاء الموديل
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Services\NotificationService;
@@ -21,9 +22,6 @@ class ProjectVersionService
         $this->githubService = $githubService;
     }
 
-    /**
-     * التحقق من الصلاحيات
-     */
     private function canAccessProject($user, Project $project): bool
     {
         if (!$user) return false;
@@ -38,16 +36,12 @@ class ProjectVersionService
         return $role === 'admin' || $project->user_id === $user->id || $project->supervisor_id === $user->id || $isMember;
     }
 
-    /**
-     * رفع إصدار جديد
-     */
     public function uploadVersion($data, $file, $user)
     {
         $project = Project::find($data['project_id']);
         if (!$project) return ['status' => 404, 'message' => 'Project not found'];
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
-        // حفظ الملف
         $path = $file->store('versions', 'public');
 
         $version = ProjectVersion::create([
@@ -58,13 +52,20 @@ class ProjectVersionService
             'file_path'           => $path,
         ]);
 
-        // إرسال الإشعار
+        // 🎯 تسجيل نشاط رفع الإصدار
+        ProjectActivity::create([
+            'project_id' => $project->id,
+            'user_id' => $user->id,
+            'action' => 'رفع إصداراً جديداً: ' . $version->version_title,
+            'type' => 'create'
+        ]);
+
         try {
             $this->notifications->notifyProject(
                 project: $project,
                 type: 'version_uploaded',
                 title: 'تم رفع إصدار جديد',
-                body: "قام {$user->name} برفع إصدار: {$version->version_title} داخل مشروع {$project->title}",
+                body: "قام {$user->name} برفع إصدار {$version->version_title} داخل مشروع {$project->title}",
                 data: [
                     'project_id' => $project->id,
                     'version_id' => $version->id,
@@ -77,9 +78,6 @@ class ProjectVersionService
         return ['status' => 201, 'message' => 'Version uploaded successfully', 'version' => $version->load('user:id,name')];
     }
 
-    /**
-     * جلب قائمة الإصدارات
-     */
     public function getVersions($projectId, $user)
     {
         $project = Project::find($projectId);
@@ -103,9 +101,6 @@ class ProjectVersionService
         return ['status' => 200, 'versions' => $versions];
     }
 
-    /**
-     * حذف إصدار
-     */
     public function deleteVersion($versionId, $user)
     {
         $version = ProjectVersion::find($versionId);
@@ -121,6 +116,14 @@ class ProjectVersionService
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
+        // 🎯 تسجيل نشاط حذف الإصدار
+        ProjectActivity::create([
+            'project_id' => $project->id,
+            'user_id' => $user->id,
+            'action' => 'حذف الإصدار: ' . $version->version_title,
+            'type' => 'update'
+        ]);
+
         if ($version->file_path && Storage::disk('public')->exists($version->file_path)) {
             Storage::disk('public')->delete($version->file_path);
         }
@@ -129,9 +132,6 @@ class ProjectVersionService
         return ['status' => 200, 'message' => 'Version deleted successfully'];
     }
 
-    /**
-     * بناء الـ Timeline
-     */
     public function getTimeline($projectId, $user)
     {
         $project = Project::find($projectId);
@@ -154,12 +154,6 @@ class ProjectVersionService
         return ['status' => 200, 'timeline' => $timeline];
     }
 
-    /**
-     * دفع الإصدار إلى جيتهاب
-     */
- /**
-     * دفع الإصدار إلى جيتهاب
-     */
     public function pushToGithub($versionId, $user)
     {
         $version = ProjectVersion::find($versionId);
@@ -168,34 +162,26 @@ class ProjectVersionService
         $project = Project::find($version->project_id);
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
-        // ✅ أضفنا $version->version_description هنا لكي نستخدمه كرسالة للكوميت
         return $this->githubService->pushVersionToGithub(
             $project, 
             $version->version_title, 
-            $version->version_description, // <-- التعديل هنا
+            $version->version_description,
             $version->file_path
         );
     }
-    /**
-     * إرسال إشعار لجميع أعضاء المشروع (المالك، المشرف، الأعضاء المقبولين)
-     * مع استثناء المستخدم الذي قام بالحدث (ignoreUserId)
-     */
+
     public function notifyProject(\App\Models\Project $project, string $type, string $title, string $body, array $data = [], int $ignoreUserId = null)
     {
-        // 1. تجميع كل المعنيين بالمشروع في مصفوفة
         $userIds = [];
 
-        // إضافة صاحب المشروع
         if ($project->user_id) {
             $userIds[] = $project->user_id;
         }
 
-        // إضافة المشرف (إن وجد)
         if ($project->supervisor_id) {
             $userIds[] = $project->supervisor_id;
         }
 
-        // إضافة جميع الطلاب المقبولين في المشروع
         $members = \Illuminate\Support\Facades\DB::table('project_members')
             ->where('project_id', $project->id)
             ->where('status', 'accepted')
@@ -203,23 +189,19 @@ class ProjectVersionService
             ->toArray();
         
         $userIds = array_merge($userIds, $members);
-
-        // إزالة التكرار (في حال كان المالك هو نفسه عضو بطريقة ما)
         $userIds = array_unique($userIds);
 
-        // 2. إزالة الشخص الذي قام بالحدث (حتى لا يصله إشعار بأنه رفع ملف)
         if ($ignoreUserId) {
             $userIds = array_diff($userIds, [$ignoreUserId]);
         }
 
-        // 3. إنشاء الإشعارات في قاعدة البيانات
         foreach ($userIds as $userId) {
             \App\Models\Notification::create([
                 'user_id' => $userId,
                 'type'    => $type,
                 'title'   => $title,
                 'body'    => $body,
-                'data'    => $data, // إذا كان الـ casting مفعل كـ array في المودل، أو استخدم json_encode($data)
+                'data'    => $data,
             ]);
         }
     }

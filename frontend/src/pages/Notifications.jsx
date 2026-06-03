@@ -13,13 +13,15 @@ import {
   Alert,
 } from "@mui/material";
 
+import EmptyState from "../components/EmptyState";
+import NotificationsOffRoundedIcon from "@mui/icons-material/NotificationsOffRounded";
+
 const API_BASE_URL = "http://127.0.0.1:8000/api";
 
 export default function Notifications() {
   const { token } = useAuth();
   const navigate = useNavigate();
 
-  // ✅ 1. السر هنا: نستخدم الرقم العام ودالة التحديث من الـ Layout ليتزامن الموقع كله
   const { unreadCount, setUnreadCount } = useOutletContext();
 
   const authHeaders = useMemo(
@@ -48,7 +50,6 @@ export default function Notifications() {
         throw new Error(data?.message || "Failed to load notifications");
 
       setItems(data?.notifications || []);
-      // تحديث الرقم العام في السايد بار من السيرفر
       if (data?.unread_count !== undefined) {
         setUnreadCount(Number(data.unread_count));
       }
@@ -60,17 +61,14 @@ export default function Notifications() {
   };
 
   const markRead = async (id) => {
-    // 1. الخصم الفوري من السايد بار
     setUnreadCount((prev) => Math.max(0, prev - 1));
 
-    // 2. تحديث الإشعار محلياً ليصبح مقروءاً
     setItems((prev) =>
       prev.map((n) =>
         n.id === id ? { ...n, read_at: new Date().toISOString() } : n,
       ),
     );
 
-    // 3. إرسال الطلب بصمت
     try {
       await fetch(`${API_BASE_URL}/notifications/${id}/mark-read`, {
         method: "POST",
@@ -80,7 +78,6 @@ export default function Notifications() {
   };
 
   const markAll = async () => {
-    // 1. التحديث الوهمي السريع للواجهة لكي لا ينتظر المستخدم
     setUnreadCount(0);
     setItems((prev) =>
       prev.map((n) => ({
@@ -89,7 +86,6 @@ export default function Notifications() {
       })),
     );
 
-    // 2. إرسال الطلب وكشف الأخطاء إن حدثت
     try {
       const response = await fetch(
         `${API_BASE_URL}/notifications/mark-all-read`,
@@ -100,7 +96,6 @@ export default function Notifications() {
       );
 
       if (!response.ok) {
-        // إذا رفض لارافيل الطلب (مثلا مشكلة Token أو 500) سيتم طباعته هنا
         const errorData = await response.json();
         console.error("مشكلة من السيرفر أثناء تحديث الإشعارات:", errorData);
       }
@@ -110,15 +105,12 @@ export default function Notifications() {
   };
 
   const deleteOne = async (id, isUnread) => {
-    // 1. إذا كان الإشعار المحذوف غير مقروء، نخصمه من السايد بار
     if (isUnread) {
       setUnreadCount((prev) => Math.max(0, prev - 1));
     }
 
-    // 2. إخفاء الإشعار من الشاشة فوراً
     setItems((prev) => prev.filter((n) => n.id !== id));
 
-    // 3. إرسال أمر الحذف للسيرفر وكشف الأخطاء
     try {
       const response = await fetch(`${API_BASE_URL}/notifications/${id}`, {
         method: "DELETE",
@@ -135,11 +127,9 @@ export default function Notifications() {
   };
 
   const deleteAll = async () => {
-    // 1. التحديث الوهمي السريع للواجهة (تفريغ القائمة وتصفير العداد)
     setItems([]);
     setUnreadCount(0);
 
-    // 2. إرسال طلب الحذف للسيرفر
     try {
       const response = await fetch(`${API_BASE_URL}/notifications/delete-all`, {
         method: "DELETE",
@@ -192,12 +182,10 @@ export default function Notifications() {
   const handleOpenNotification = async (n) => {
     const url = resolveNotificationUrl(n);
 
-    // إذا كان غير مقروء، يتم الخصم فوراً وبلا رجعة قبل الانتقال
     if (n?.id && !n?.read_at) {
       setUnreadCount((prev) => Math.max(0, prev - 1));
 
       try {
-        // إشعار السيرفر بصمت في الخلفية
         fetch(`${API_BASE_URL}/notifications/mark-read/${n.id}`, {
           method: "POST",
           headers: authHeaders,
@@ -232,6 +220,15 @@ export default function Notifications() {
       </Box>
     );
   }
+
+  const hoverEffect = {
+    transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+    "&:hover": {
+      transform: "translateY(-4px)",
+      boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+      borderColor: "white",
+    },
+  };
 
   return (
     <Box sx={{ maxWidth: 900, mx: "auto" }}>
@@ -278,8 +275,13 @@ export default function Notifications() {
 
         <Divider sx={{ my: 2 }} />
 
+        {/* 🎯 هنا تم دمج مكون الفراغ الذكي */}
         {items.length === 0 ? (
-          <Typography color="text.secondary">No notifications.</Typography>
+          <EmptyState
+            icon={<NotificationsOffRoundedIcon />}
+            title="لا توجد إشعارات حالياً"
+            description="أنت على اطلاع بكل جديد! لم تصلك أي إشعارات جديدة حتى هذه اللحظة."
+          />
         ) : (
           <Stack spacing={1}>
             {items.map((n) => {
@@ -288,7 +290,6 @@ export default function Notifications() {
 
               const title = payload.title || "Notification";
               const body = payload.body || "";
-              const type = payload.type || "system";
 
               return (
                 <Paper
@@ -301,10 +302,13 @@ export default function Notifications() {
                     borderColor: "#EFEFEF",
                     bgcolor: isUnread ? "rgba(255,193,7,0.10)" : "transparent",
                     cursor: "pointer",
+                    // 🎯 دمج صحيح لمتغير hoverEffect
+                    transition: hoverEffect.transition,
                     "&:hover": {
                       bgcolor: isUnread
                         ? "rgba(255,193,7,0.14)"
                         : "rgba(0,0,0,0.03)",
+                      ...hoverEffect["&:hover"],
                     },
                   }}
                 >
@@ -313,15 +317,24 @@ export default function Notifications() {
                     justifyContent="space-between"
                     alignItems="flex-start"
                     spacing={2}
+                    dir="rtl"
                   >
                     <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 900 }}>{title}</Typography>
+                      <Typography
+                        sx={{ fontWeight: 900, unicodeBidi: "isolate" }}
+                      >
+                        {title}
+                      </Typography>
 
                       {body ? (
                         <Typography
                           variant="body2"
                           color="text.secondary"
-                          sx={{ mt: 0.3, whiteSpace: "pre-wrap" }}
+                          sx={{
+                            mt: 0.3,
+                            whiteSpace: "pre-wrap",
+                            unicodeBidi: "isolate",
+                          }}
                         >
                           {body}
                         </Typography>
@@ -333,7 +346,11 @@ export default function Notifications() {
                         sx={{ mt: 1 }}
                         alignItems="center"
                       >
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ unicodeBidi: "isolate" }}
+                        >
                           {n.created_at
                             ? new Date(n.created_at).toLocaleString("ar-EG")
                             : ""}
@@ -341,7 +358,7 @@ export default function Notifications() {
                       </Stack>
                     </Box>
 
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction="row" spacing={1} dir="ltr">
                       {isUnread && (
                         <Button
                           size="small"
@@ -360,7 +377,6 @@ export default function Notifications() {
                         variant="outlined"
                         onClick={(e) => {
                           e.stopPropagation();
-                          // تمرير حالة الإشعار (مقروء أم لا) للخصم الصحيح
                           deleteOne(n.id, isUnread);
                         }}
                       >

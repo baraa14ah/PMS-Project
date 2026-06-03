@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useThemeMode } from "../context/ThemeContext";
+import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
+import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
+
+// 🎯 استدعاء مكون مسار التنقل الذكي
+import SystemBreadcrumbs from "../components/SystemBreadcrumbs";
 
 import {
   Box,
@@ -82,6 +88,12 @@ export default function DashboardLayout() {
     navigate("/login");
   };
 
+  // 🎯 استدعاء الوضع الليلي
+  const { mode, toggleTheme } = useThemeMode() || {
+    mode: "light",
+    toggleTheme: () => {},
+  };
+
   // =========================
   // Notifications
   // =========================
@@ -95,8 +107,6 @@ export default function DashboardLayout() {
 
   const openNotifMenu = (e) => setNotifAnchorEl(e.currentTarget);
   const closeNotifMenu = () => setNotifAnchorEl(null);
-
-  const [lastNotifFetchAt, setLastNotifFetchAt] = useState(0);
 
   const parseNotif = (n) => {
     const d = n?.data || {};
@@ -128,7 +138,6 @@ export default function DashboardLayout() {
     setNotifLoading(true);
     setNotifError("");
     try {
-      // جلب البيانات فوراً بدون أي تأخير أو كاش
       const res = await fetch(`${API_BASE_URL}/notifications`, {
         headers: authHeaders,
       });
@@ -184,18 +193,13 @@ export default function DashboardLayout() {
     return "/dashboard/notifications";
   };
 
-  // ✅ الضربة القاضية لمشكلة الرقم المعلق
   const handleClickNotification = async (n) => {
     closeNotifMenu();
     const url = resolveNotificationUrl(n);
     navigate(url);
 
-    // إذا كان الإشعار غير مقروء، نخصم الرقم فوراً وبلا رجعة
     if (n && !n.read_at) {
-      // 1. الخصم الفوري والمؤكد
       setUnreadCount((prev) => Math.max(0, prev - 1));
-
-      // 2. تغيير لون الإشعار محلياً في القائمة
       setLatestNotifs((prev) =>
         prev.map((item) =>
           item.id === n.id
@@ -203,16 +207,11 @@ export default function DashboardLayout() {
             : item,
         ),
       );
-
-      // 3. إرسال الطلب بصمت (Fire and Forget) دون انتظار الرقم القديم ليعود
       try {
-        const response = await fetch(
-          `${API_BASE_URL}/notifications/${n.id}/mark-read`,
-          {
-            method: "POST", // استخدمنا POST كما كتبناها في مسارات لارافيل
-            headers: authHeaders,
-          },
-        );
+        await fetch(`${API_BASE_URL}/notifications/${n.id}/mark-read`, {
+          method: "POST",
+          headers: authHeaders,
+        });
       } catch (e) {
         console.error("Failed to mark as read in background");
       }
@@ -244,7 +243,6 @@ export default function DashboardLayout() {
             data?.pending_count ??
             data?.count ??
             (Array.isArray(data?.invitations) ? data.invitations.length : 0) ??
-            (Array.isArray(data?.pending) ? data.pending.length : 0) ??
             0;
           setStudentInvCount(Number(count) || 0);
         }
@@ -262,7 +260,6 @@ export default function DashboardLayout() {
             data?.pending_count ??
             data?.count ??
             (Array.isArray(data?.invitations) ? data.invitations.length : 0) ??
-            (Array.isArray(data?.pending) ? data.pending.length : 0) ??
             0;
           setSupervisorInvCount(Number(count) || 0);
         }
@@ -275,16 +272,10 @@ export default function DashboardLayout() {
     fetchUnreadCount();
     fetchInvitationCounts();
 
-    // 1. الدالة التي تقوم بالتحديث عند استلام الإشارة
     const handleUpdateBadges = () => {
       fetchInvitationCounts();
-      // (ويمكنك إضافة fetchUnreadCount إذا أردت تحديث كل شيء)
     };
-
-    // 2. الاستماع للإشارة التي سميناها 'updateSidebarBadges'
     window.addEventListener("updateSidebarBadges", handleUpdateBadges);
-
-    // 3. تنظيف الاستماع عند إغلاق المكون
     return () => {
       window.removeEventListener("updateSidebarBadges", handleUpdateBadges);
     };
@@ -322,33 +313,22 @@ export default function DashboardLayout() {
       badge: studentInvCount,
     },
     {
-      label: "Messages",
-      to: "/dashboard/messages",
-      icon: <MailRoundedIcon />,
-      hidden: true,
-    },
-    {
-      label: "Tasks",
-      to: "/dashboard/tasks",
-      icon: <TaskAltRoundedIcon />,
-      hidden: true,
-    },
-    {
-      label: "Members",
-      to: "/dashboard/members",
-      icon: <GroupRoundedIcon />,
-      hidden: true,
-    },
-    {
-      label: "Settings",
-      to: "/dashboard/settings",
-      icon: <SettingsRoundedIcon />,
-      hidden: true,
+      label: "Users Management",
+      to: "/dashboard/users",
+      icon: <GroupRoundedIcon />, // الأيقونة موجودة ومستوردة مسبقاً في الملف
+      hidden: !isAdmin, // هذا السطر يضمن أن المدير فقط هو من يرى هذا الزر
     },
   ];
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F6F7FB" }}>
+    // 🎯 تم تغيير لون الخلفية ليتبع الثيم
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        bgcolor: "background.default",
+      }}
+    >
       {/* Sidebar */}
       <Drawer
         variant="permanent"
@@ -358,8 +338,9 @@ export default function DashboardLayout() {
           [`& .MuiDrawer-paper`]: {
             width: drawerWidth,
             boxSizing: "border-box",
-            borderRight: "1px solid #E7E8F0",
-            bgcolor: "#FFFFFF",
+            borderRight: "1px solid",
+            borderColor: "divider", // 🎯 يتغير لونه حسب الثيم
+            bgcolor: "background.paper", // 🎯 يتغير لونه حسب الثيم
             px: 2,
             py: 2,
           },
@@ -379,11 +360,21 @@ export default function DashboardLayout() {
               bgcolor: "primary.main",
             }}
           />
-          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+          <Typography variant="h6" sx={{ fontWeight: 900 }}>
             ByteHub
           </Typography>
+          <Box sx={{ flexGrow: 1 }} />
+          <IconButton onClick={toggleTheme} color="inherit">
+            {mode === "dark" ? (
+              <LightModeRoundedIcon sx={{ color: "#f1c40f" }} />
+            ) : (
+              <DarkModeRoundedIcon />
+            )}
+          </IconButton>
         </Stack>
+
         <Divider sx={{ my: 1.5 }} />
+
         <Stack
           direction="row"
           spacing={1.5}
@@ -394,7 +385,7 @@ export default function DashboardLayout() {
             {(displayName?.[0] || "U").toUpperCase()}
           </Avatar>
           <Box>
-            <Typography sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+            <Typography sx={{ fontWeight: 800, lineHeight: 1.1 }}>
               {displayName}
             </Typography>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>
@@ -402,7 +393,9 @@ export default function DashboardLayout() {
             </Typography>
           </Box>
         </Stack>
+
         <Divider sx={{ mb: 1 }} />
+
         <List sx={{ px: 0 }}>
           {navItems
             .filter((x) => !x.hidden)
@@ -422,14 +415,14 @@ export default function DashboardLayout() {
                     borderRadius: 2,
                     mb: 0.5,
                     px: 1.25,
-                    bgcolor: active ? "rgba(79,70,229,0.10)" : "transparent",
-                    "&:hover": { bgcolor: "rgba(79,70,229,0.08)" },
+                    bgcolor: active ? "rgba(37, 99, 235, 0.12)" : "transparent",
+                    "&:hover": { bgcolor: "rgba(37, 99, 235, 0.08)" },
                   }}
                 >
                   <ListItemIcon
                     sx={{
                       minWidth: 40,
-                      color: active ? "primary.main" : "text.secondary",
+                      color: active ? "secondary.main" : "text.secondary",
                     }}
                   >
                     {item.badge ? (
@@ -449,7 +442,7 @@ export default function DashboardLayout() {
                     primary={item.label}
                     primaryTypographyProps={{
                       fontWeight: active ? 800 : 600,
-                      color: active ? "primary.main" : "text.primary",
+                      color: active ? "secondary.main" : "text.primary",
                     }}
                   />
                 </ListItemButton>
@@ -465,25 +458,26 @@ export default function DashboardLayout() {
             mt: 2,
             borderRadius: 2,
             textTransform: "none",
-            fontWeight: 700,
+            fontWeight: 800,
             justifyContent: "flex-start",
             px: 1.5,
           }}
           variant="outlined"
-          color="primary"
+          color="inherit"
           fullWidth
         >
           Logout
         </Button>
       </Drawer>
 
-      {/* Main */}
+      {/* Main Content Area */}
       <Box sx={{ flexGrow: 1, p: 3 }}>
         {/* Topbar */}
         <Box
           sx={{
-            bgcolor: "#FFFFFF",
-            border: "1px solid #E7E8F0",
+            bgcolor: "background.paper", // 🎯 يتغير لونه حسب الثيم
+            border: "1px solid",
+            borderColor: "divider", // 🎯 يتغير لونه حسب الثيم
             borderRadius: 3,
             px: 2,
             py: 1.5,
@@ -496,7 +490,7 @@ export default function DashboardLayout() {
           <TextField
             size="small"
             placeholder="Search for anything..."
-            sx={{ width: 420, bgcolor: "#F7F7FB", borderRadius: 2 }}
+            sx={{ width: 420, bgcolor: "background.default", borderRadius: 2 }} // 🎯 ذكي
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -507,7 +501,6 @@ export default function DashboardLayout() {
           />
           <Box sx={{ flexGrow: 1 }} />
 
-          {/* ✅ Notifications */}
           <Tooltip title="Notifications">
             <IconButton onClick={openNotifMenu}>
               <Badge color="error" badgeContent={unreadCount} max={99}>
@@ -521,15 +514,21 @@ export default function DashboardLayout() {
             open={notifOpen}
             onClose={closeNotifMenu}
             PaperProps={{
-              sx: { width: 360, borderRadius: 3, mt: 1, overflow: "hidden" },
+              sx: {
+                width: 360,
+                borderRadius: 3,
+                mt: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                overflow: "hidden",
+              },
             }}
           >
-            <Box sx={{ px: 2, py: 1.25, bgcolor: "#F7F7FB" }}>
+            <Box sx={{ px: 2, py: 1.25, bgcolor: "background.default" }}>
               <Typography sx={{ fontWeight: 900 }}>آخر الإشعارات</Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                آخر 3 إشعارات
-              </Typography>
             </Box>
+            <Divider />
+
             {notifLoading && (
               <Box
                 sx={{ p: 2, display: "flex", gap: 1.5, alignItems: "center" }}
@@ -540,6 +539,7 @@ export default function DashboardLayout() {
                 </Typography>
               </Box>
             )}
+
             {!notifLoading && notifError && (
               <Box sx={{ p: 2 }}>
                 <Typography variant="body2" color="error">
@@ -547,6 +547,7 @@ export default function DashboardLayout() {
                 </Typography>
               </Box>
             )}
+
             {!notifLoading && !notifError && latestNotifs.length === 0 && (
               <Box sx={{ p: 2 }}>
                 <Typography variant="body2" color="text.secondary">
@@ -554,6 +555,7 @@ export default function DashboardLayout() {
                 </Typography>
               </Box>
             )}
+
             {!notifLoading &&
               !notifError &&
               latestNotifs.map((n) => {
@@ -571,7 +573,7 @@ export default function DashboardLayout() {
                         ? "4px solid"
                         : "4px solid transparent",
                       borderLeftColor: isUnread
-                        ? "primary.main"
+                        ? "secondary.main"
                         : "transparent",
                       whiteSpace: "normal",
                     }}
@@ -580,7 +582,7 @@ export default function DashboardLayout() {
                       sx={{
                         width: 34,
                         height: 34,
-                        bgcolor: isUnread ? "primary.main" : "grey.400",
+                        bgcolor: isUnread ? "secondary.main" : "grey.500",
                         mt: 0.2,
                       }}
                     >
@@ -617,20 +619,18 @@ export default function DashboardLayout() {
             </Box>
           </Menu>
 
-          {/* Profile Clickable Area */}
+          {/* Profile Area */}
           <Stack
             direction="row"
             alignItems="center"
             spacing={1}
             onClick={handleOpenMenu}
-            role="button"
-            tabIndex={0}
             sx={{
               cursor: "pointer",
               px: 1,
               py: 0.6,
               borderRadius: 2,
-              "&:hover": { bgcolor: "rgba(0,0,0,0.04)" },
+              "&:hover": { bgcolor: "action.hover" },
               userSelect: "none",
             }}
           >
@@ -686,7 +686,10 @@ export default function DashboardLayout() {
           </Menu>
         </Box>
 
-        {/* Content */}
+        {/* 🎯 تم إضافة مسار التنقل الذكي هنا ليعمل في كل النظام */}
+        <SystemBreadcrumbs />
+
+        {/* Dynamic Page Content */}
         <Outlet context={{ unreadCount, setUnreadCount, fetchUnreadCount }} />
       </Box>
     </Box>

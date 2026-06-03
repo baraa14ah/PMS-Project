@@ -59,7 +59,7 @@ class CommentService
             actorUserId: (int)$user->id,
             type: 'comment.project',
             title: 'تعليق جديد على المشروع',
-            body: "{$user->name} أضاف تعليقاً على مشروع: {$project->title}",
+            body: "{$user->name} أضاف تعليقاً على مشروع {$project->title}",
             data: [
                 'project_id' => (int)$projectId,
                 'comment_id' => (int)$comment->id,

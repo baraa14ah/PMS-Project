@@ -4,21 +4,18 @@ namespace App\Services;
 
 use App\Models\Project;
 use App\Models\GitCommit;
+use App\Models\ProjectActivity; // 🎯 استدعاء الموديل
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class GithubService
 {
-    /**
-     * جلب ومزامنة التحديثات من مستودع جيتهاب
-     */
     public function syncProjectCommits(Project $project)
     {
         if (!$project->github_repo_url) {
             return ['status' => 422, 'message' => 'GitHub repo URL is missing'];
         }
 
-        // تنظيف الرابط واستخراج اسم المستخدم والمستودع بطريقة آمنة
         $url = trim($project->github_repo_url, '/');
         $url = preg_replace('/\.git$/', '', $url);
 
@@ -33,7 +30,6 @@ class GithubService
         $owner = $m[1];
         $repo  = $m[2];
 
-        // جلب التوكن من ملف .env
         $token = env('GITHUB_TOKEN');
         if (!$token) {
             return [
@@ -45,7 +41,6 @@ class GithubService
         $apiUrl = "https://api.github.com/repos/{$owner}/{$repo}/commits?per_page=30";
 
         try {
-            // الاتصال بـ GitHub
             $res = Http::withHeaders([
                 'Accept' => 'application/vnd.github+json',
                 'Authorization' => "Bearer {$token}",
@@ -53,7 +48,6 @@ class GithubService
                 'User-Agent' => 'Project-Management-System'
             ])->get($apiUrl);
 
-            // معالجة الأخطاء القادمة من جيتهاب باحترافية
             if (!$res->successful()) {
                 Log::error("GitHub API Failed for Project {$project->id}: " . $res->body());
                 
@@ -71,7 +65,6 @@ class GithubService
             $items = $res->json() ?? [];
             $saved = 0;
 
-            // حفظ البيانات
             foreach ($items as $item) {
                 $sha = $item['sha'] ?? null;
                 if (!$sha) continue;
@@ -91,6 +84,16 @@ class GithubService
                 $saved++;
             }
 
+            // 🎯 تسجيل نشاط جلب التحديثات
+            if ($saved > 0) {
+                ProjectActivity::create([
+                    'project_id' => $project->id,
+                    'user_id' => auth()->id() ?? $project->user_id, // في حال تم الاستدعاء عبر Job
+                    'action' => "قام بمزامنة الكود وجلب {$saved} تحديثات من مستودع GitHub",
+                    'type' => 'update'
+                ]);
+            }
+
             return [
                 'status' => 200,
                 'message' => 'Commits synced successfully',
@@ -106,25 +109,15 @@ class GithubService
             ];
         }
     }
-    /**
-     * ✅ رفع إصدار (ملف محلي) إلى جيتهاب مباشرة كـ Commit جديد
-     */
-   /**
-     * ✅ رفع إصدار (ملف محلي) إلى جيتهاب مباشرة كـ Commit جديد بأسماء نظيفة
-     */
-   /**
-     * ✅ رفع إصدار إلى جيتهاب (داخل مجلد versions، والكوميت هو الوصف)
-     */
+
     public function pushVersionToGithub($project, $title, $description, $filePath)
     {
-        // 1. جلب المستخدم الحالي وتنظيف التوكن من أي مسافات مخفية (السر هنا!)
         $user = auth()->user();
         if (!$user || !$user->github_token) {
             return ['status' => 403, 'message' => 'يرجى ربط حسابك بـ GitHub أولاً.'];
         }
         $cleanToken = trim($user->github_token);
 
-        // 2. استخراج مسار المستودع بذكاء
         $repoUrl = rtrim($project->github_repo_url, '/');
         $urlParts = explode('github.com/', $repoUrl);
         if (count($urlParts) < 2) {
@@ -132,24 +125,20 @@ class GithubService
         }
         $repoPath = trim($urlParts[1]);
 
-        // 3. جلب الملف من السيرفر وتحويله لتشفير Base64
         if (!\Illuminate\Support\Facades\Storage::disk('public')->exists($filePath)) {
             return ['status' => 404, 'message' => 'الملف غير موجود على السيرفر'];
         }
         $fileContent = \Illuminate\Support\Facades\Storage::disk('public')->get($filePath);
         $base64Content = base64_encode($fileContent);
 
-        // 4. هندسة اسم الملف ورسالة الكوميت
         $extension = pathinfo($filePath, PATHINFO_EXTENSION);
         $safeVersionName = str_replace(' ', '_', $title);
         $fileName = rawurlencode($safeVersionName . '.' . $extension);
 
-        // الوصف سيصبح هو رسالة الكوميت هنا
         $commitMessage = $description ? $description : "تحديث جديد للإصدار: {$title}";
 
-        // 5. الاتصال الفعلي بـ GitHub
         $response = \Illuminate\Support\Facades\Http::withToken($cleanToken)
-            ->withoutVerifying() // تخطي SSL في بيئة التطوير المحلية
+            ->withoutVerifying()
             ->timeout(60)
             ->withHeaders([
                 'User-Agent' => 'My-Graduation-Project',
@@ -160,8 +149,16 @@ class GithubService
                 'content' => $base64Content,
             ]);
 
-        // 6. الردود
         if ($response->successful()) {
+            
+            // 🎯 تسجيل نشاط الرفع المباشر إلى جيتهاب
+            ProjectActivity::create([
+                'project_id' => $project->id,
+                'user_id' => $user->id,
+                'action' => "دفع الإصدار '{$title}' مباشرة إلى مستودع GitHub",
+                'type' => 'create'
+            ]);
+
             return ['status' => 200, 'message' => 'تم الرفع إلى GitHub بنجاح! 🚀'];
         }
 

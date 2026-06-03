@@ -160,4 +160,16 @@ class ProjectController extends Controller
         
         return response()->json(['students' => $students]);
     }
+    public function getActivities($id)
+{
+    $activities = \App\Models\ProjectActivity::with('user:id,name') // جلب اسم المستخدم فقط
+        ->where('project_id', $id)
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+    return response()->json([
+        'status' => 'success',
+        'activities' => $activities
+    ]);
+}
 }

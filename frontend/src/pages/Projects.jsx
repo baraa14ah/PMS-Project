@@ -213,7 +213,15 @@ export default function Projects() {
 
     return String(p?.status || "pending").toLowerCase();
   };
-
+  // 🎯 تأثير التحويم الأنيق (يمكنك نسخه لأي مكون في مشروعك)
+  const hoverEffect = {
+    transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+    "&:hover": {
+      transform: "translateY(-4px)", // رفع البطاقة 4 بيكسل للأعلى
+      boxShadow: "0 10px 25px rgba(0,0,0,0.08)", // ظل ناعم جداً
+      borderColor: "primary.main", // تغيير لون الإطار للون الأساسي (اختياري)
+    },
+  };
   return (
     <Box>
       {/* Header */}

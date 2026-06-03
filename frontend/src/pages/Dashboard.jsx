@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
+import toast from "react-hot-toast"; // 🎯 أضفنا هذا الاستيراد لإصلاح خطأ الـ toast في السطر 118
+
 // MUI
 import {
   Box,
@@ -30,14 +31,25 @@ import NotificationsRoundedIcon from "@mui/icons-material/NotificationsRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import ListAltRoundedIcon from "@mui/icons-material/ListAltRounded";
 import HourglassBottomRoundedIcon from "@mui/icons-material/HourglassBottomRounded";
+import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
+import AutoGraphRoundedIcon from "@mui/icons-material/AutoGraphRounded";
+import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
 
 const API_BASE_URL = "http://127.0.0.1:8000/api";
+
+// 🎯 تأثير التحويم الموحد للبطاقات
+const hoverEffect = {
+  transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+  "&:hover": {
+    transform: "translateY(-4px)",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+  },
+};
 
 export default function Dashboard() {
   const { user, token: ctxToken } = useAuth();
   const navigate = useNavigate();
 
-  // ✅ fallback لو token مش موجود في context
   const token = ctxToken || localStorage.getItem("token");
 
   const name = user?.user?.name || "مستخدم";
@@ -94,11 +106,28 @@ export default function Dashboard() {
 
   const roleChip = () => {
     if (role === "admin")
-      return <Chip size="small" color="error" label="Admin" />;
+      return (
+        <Chip
+          size="small"
+          color="error"
+          label="مدير النظام"
+          icon={<AdminPanelSettingsRoundedIcon />}
+          sx={{ fontWeight: 800 }}
+        />
+      );
     if (role === "supervisor")
-      return <Chip size="small" color="info" label="Supervisor" />;
+      return (
+        <Chip size="small" color="info" label="مشرف" sx={{ fontWeight: 800 }} />
+      );
     if (role === "student")
-      return <Chip size="small" color="success" label="Student" />;
+      return (
+        <Chip
+          size="small"
+          color="success"
+          label="طالب"
+          sx={{ fontWeight: 800 }}
+        />
+      );
     return <Chip size="small" variant="outlined" label={role} />;
   };
 
@@ -125,7 +154,6 @@ export default function Dashboard() {
       headers: authHeaders,
     });
 
-    // ✅ التقاط خطأ الـ Spam وتنبيه المستخدم بدلاً من تحطيم الموقع
     if (res.status === 429) {
       toast.error(
         "ضغط كبير على السيرفر (Too Many Attempts). يرجى الانتظار ثوانٍ وتحديث الصفحة.",
@@ -135,7 +163,6 @@ export default function Dashboard() {
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error(data?.message || "تعذر جلب المشاريع");
 
-    // ✅ الحل الجذري لاختفاء المشاريع: دعم نظام الصفحات (Pagination) الخاص بـ Laravel
     const projectsArray = data?.projects?.data || data?.projects || [];
     return Array.isArray(projectsArray) ? projectsArray : [];
   };
@@ -145,15 +172,11 @@ export default function Dashboard() {
       headers: authHeaders,
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok) return []; // ✅ لا نوقف الداشبورد إذا مشروع واحد فشل
+    if (!res.ok) return [];
     return data?.tasks || [];
   };
 
   const fetchPendingInvites = async () => {
-    // ✅ حسب دورك
-    // supervisor: /supervisor/invitations
-    // student: /student/invitations
-    // admin: نجرب الاثنين ونجمعهم
     try {
       if (role === "supervisor") {
         const r = await fetch(`${API_BASE_URL}/supervisor/invitations`, {
@@ -211,16 +234,12 @@ export default function Dashboard() {
         setLoading(true);
         setError("");
 
-        // 1) جلب المشاريع الصحيحة
         const projects = await fetchProjects();
-
-        // ✅ 2) إيقاف الـ Spam: لكي لا يغضب السيرفر، سنجلب مهام "أحدث 3 مشاريع فقط" بدلاً من كل المشاريع
         const recentProjs = sortByDateDesc(projects).slice(0, 3);
         const taskLists = await Promise.all(
           recentProjs.map((p) => fetchProjectTasks(p.id)),
         );
 
-        // تجميع المهام
         const allTasks = taskLists.flat().map((t) => {
           const project = projects.find((p) => p.id === t.project_id);
           return {
@@ -261,15 +280,72 @@ export default function Dashboard() {
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  // 🎯 إعدادات الواجهة الذكية بناءً على الصلاحيات
+  const dashboardConfig = {
+    admin: {
+      greeting: "نظرة شاملة على النظام، تحكم بالمشاريع والدعوات بسلاسة.",
+      projectsTitle: "إجمالي مشاريع النظام",
+      tasksTitle: "إجمالي المهام المسجلة",
+      invitesTitle: "كل الدعوات المعلقة",
+      action1: {
+        label: "إدارة المشاريع",
+        icon: <FolderOpenRoundedIcon />,
+        to: "/dashboard/projects",
+      },
+      action2: {
+        label: "إدارة المستخدمين",
+        icon: <AdminPanelSettingsRoundedIcon />,
+        to: "#",
+      }, // يمكن تغييره لصفحة المستخدمين مستقبلاً
+    },
+    supervisor: {
+      greeting: "تابع أداء الطلاب والمشاريع التي تشرف عليها بكل سهولة.",
+      projectsTitle: "مشاريع تحت إشرافك",
+      tasksTitle: "مهام المشاريع المُشرف عليها",
+      invitesTitle: "طلبات إشراف معلقة",
+      action1: {
+        label: "مشاريع الإشراف",
+        icon: <FolderOpenRoundedIcon />,
+        to: "/dashboard/projects",
+      },
+      action2: {
+        label: "طلبات الإشراف",
+        icon: <PersonAddAltRoundedIcon />,
+        to: "/dashboard/supervisor/invitations",
+      },
+    },
+    student: {
+      greeting: "تابع مشاريعك، أنجز مهامك، وحقق أهدافك بسرعة.",
+      projectsTitle: "مشاريعك الحالية",
+      tasksTitle: "المهام المطلوبة منك",
+      invitesTitle: "دعوات فرق معلقة",
+      action1: {
+        label: "مشاريعي",
+        icon: <FolderOpenRoundedIcon />,
+        to: "/dashboard/projects",
+      },
+      action2: {
+        label: "دعوات الانضمام",
+        icon: <PersonAddAltRoundedIcon />,
+        to: "/dashboard/student/invitations",
+      },
+    },
+  };
+
+  // جلب الإعداد المناسب للدور الحالي (مع وضع افتراضي للطالب إذا لم يُعرف الدور)
+  const currentConfig = dashboardConfig[role] || dashboardConfig.student;
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: "auto" }}>
-      {/* Header */}
+      {/* 🎯 Header الذكي */}
       <Paper
         elevation={0}
         sx={{
-          p: 2.5,
+          p: 3,
           borderRadius: 3,
           border: "1px solid #EAEAEA",
+          bgcolor: role === "admin" ? "rgba(211, 47, 47, 0.02)" : "transparent", // تمييز خفيف للمدير
         }}
       >
         <Stack
@@ -279,329 +355,424 @@ export default function Dashboard() {
           alignItems={{ xs: "flex-start", md: "center" }}
         >
           <Box>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <DashboardRoundedIcon />
-              <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                Dashboard
+            <Stack
+              direction="row"
+              spacing={1.5}
+              alignItems="center"
+              sx={{ mb: 1 }}
+            >
+              <DashboardRoundedIcon color="primary" fontSize="large" />
+              <Typography variant="h4" sx={{ fontWeight: 900 }}>
+                الرئيسية
               </Typography>
               {roleChip()}
             </Stack>
-            <Typography sx={{ mt: 0.5, color: "text.secondary" }}>
-              مرحباً، <b>{name}</b> — تابع مشاريعك، المهام، والتقدّم بسرعة.
+            <Typography
+              variant="subtitle1"
+              sx={{ color: "text.secondary", fontWeight: 500 }}
+            >
+              مرحباً <b>{name}</b>، {currentConfig.greeting}
             </Typography>
           </Box>
 
-          <Stack direction="row" spacing={1} flexWrap="wrap">
+          <Stack direction="row" spacing={1.5} flexWrap="wrap">
             <Button
               component={RouterLink}
-              to="/dashboard/projects"
+              to={currentConfig.action1.to}
               variant="contained"
-              startIcon={<FolderOpenRoundedIcon />}
-              sx={{ borderRadius: 2, fontWeight: 900, textTransform: "none" }}
+              startIcon={currentConfig.action1.icon}
+              sx={{ borderRadius: 2, fontWeight: 800, px: 3 }}
             >
-              المشاريع
+              {currentConfig.action1.label}
             </Button>
             <Button
               component={RouterLink}
-              to="/dashboard/notifications"
+              to={currentConfig.action2.to}
               variant="outlined"
-              startIcon={<NotificationsRoundedIcon />}
-              sx={{ borderRadius: 2, fontWeight: 900, textTransform: "none" }}
+              startIcon={currentConfig.action2.icon}
+              sx={{ borderRadius: 2, fontWeight: 800, px: 3 }}
             >
-              الإشعارات
+              {currentConfig.action2.label}
             </Button>
           </Stack>
         </Stack>
 
-        <Divider sx={{ my: 2 }} />
+        <Divider sx={{ my: 3 }} />
 
-        {/* Progress */}
+        {/* 🎯 Progress Bar المطور */}
         {loading ? (
           <Stack direction="row" spacing={2} alignItems="center">
             <CircularProgress size={20} />
             <Typography sx={{ fontWeight: 700 }} color="text.secondary">
-              جارِ تحميل الداشبورد...
+              جارِ تحميل البيانات...
             </Typography>
           </Stack>
         ) : error ? (
           <Alert severity="error">{error}</Alert>
         ) : (
-          <Box>
+          <Box sx={{ p: 2, bgcolor: "rgba(0,0,0,0.02)", borderRadius: 2 }}>
             <Stack
               direction="row"
               justifyContent="space-between"
-              sx={{ mb: 1 }}
+              sx={{ mb: 1.5 }}
             >
-              <Typography variant="body2" color="text.secondary">
-                التقدّم العام
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 900 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <AutoGraphRoundedIcon color="primary" fontSize="small" />
+                <Typography variant="body1" sx={{ fontWeight: 800 }}>
+                  مؤشر الإنجاز العام
+                </Typography>
+              </Stack>
+              <Typography
+                variant="h6"
+                sx={{ fontWeight: 900, color: "primary.main" }}
+              >
                 {safePercent(stats.progress)}%
               </Typography>
             </Stack>
             <LinearProgress
               variant="determinate"
               value={safePercent(stats.progress)}
-              sx={{ height: 10, borderRadius: 5 }}
+              sx={{ height: 12, borderRadius: 6, bgcolor: "rgba(0,0,0,0.05)" }}
             />
             <Typography
               variant="caption"
               color="text.secondary"
-              sx={{ display: "block", mt: 1 }}
+              sx={{ display: "block", mt: 1.5, fontWeight: 600 }}
             >
-              مكتمل: {stats.tasksCompleted} / {stats.tasksTotal} مهمة
+              تم إنجاز {stats.tasksCompleted} من أصل {stats.tasksTotal} مهمة
+              نشطة.
             </Typography>
           </Box>
         )}
       </Paper>
 
-      {/* Stats Cards */}
+      {/* 🎯 Stats Cards المتكيفة */}
       {!loading && !error && (
         <Stack
           direction={{ xs: "column", md: "row" }}
           spacing={2}
-          sx={{ mt: 2 }}
+          sx={{ mt: 3 }}
         >
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              flex: 1,
-              borderRadius: 3,
-              border: "1px solid #EAEAEA",
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <FolderOpenRoundedIcon />
-              <Typography sx={{ fontWeight: 900 }}>المشاريع</Typography>
-            </Stack>
-            <Typography variant="h4" sx={{ fontWeight: 900, mt: 1 }}>
-              {stats.projectsTotal}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              عدد المشاريع حسب صلاحياتك
-            </Typography>
-          </Paper>
+          {[
+            {
+              title: "المشاريع",
+              value: stats.projectsTotal,
+              icon: <FolderOpenRoundedIcon fontSize="large" />,
+              desc: currentConfig.projectsTitle,
+              color: "#3B82F6",
+            },
+            {
+              title: "المهام",
+              value: stats.tasksTotal,
+              icon: <ListAltRoundedIcon fontSize="large" />,
+              desc: currentConfig.tasksTitle,
+              color: "#8B5CF6",
+            },
+            {
+              title: "المنجز",
+              value: stats.tasksCompleted,
+              icon: <CheckCircleRoundedIcon fontSize="large" />,
+              desc: "مهام تم إكمالها بنجاح",
+              color: "#10B981",
+            },
+            {
+              title: "الدعوات",
+              value: stats.pendingInvites,
+              icon: <HourglassBottomRoundedIcon fontSize="large" />,
+              desc: currentConfig.invitesTitle,
+              color: "#F59E0B",
+            },
+          ].map((stat, idx) => (
+            <Paper
+              key={idx}
+              elevation={0}
+              sx={{
+                p: 3,
+                flex: 1,
+                borderRadius: 3,
+                border: "1px solid #EAEAEA",
+                position: "relative",
+                overflow: "hidden",
+                ...hoverEffect, // تطبيق تأثير النبض
+              }}
+            >
+              {/* لمسة لونية خفيفة في زاوية البطاقة */}
+              <Box
+                sx={{
+                  position: "absolute",
+                  top: -15,
+                  left: -15,
+                  width: 60,
+                  height: 60,
+                  borderRadius: "50%",
+                  bgcolor: stat.color,
+                  opacity: 0.1,
+                }}
+              />
 
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              flex: 1,
-              borderRadius: 3,
-              border: "1px solid #EAEAEA",
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <ListAltRoundedIcon />
-              <Typography sx={{ fontWeight: 900 }}>المهام</Typography>
-            </Stack>
-            <Typography variant="h4" sx={{ fontWeight: 900, mt: 1 }}>
-              {stats.tasksTotal}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              إجمالي المهام المرتبطة بمشاريعك
-            </Typography>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              flex: 1,
-              borderRadius: 3,
-              border: "1px solid #EAEAEA",
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <CheckCircleRoundedIcon />
-              <Typography sx={{ fontWeight: 900 }}>المكتمل</Typography>
-            </Stack>
-            <Typography variant="h4" sx={{ fontWeight: 900, mt: 1 }}>
-              {stats.tasksCompleted}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              مهام مكتملة حتى الآن
-            </Typography>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              flex: 1,
-              borderRadius: 3,
-              border: "1px solid #EAEAEA",
-            }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <HourglassBottomRoundedIcon />
-              <Typography sx={{ fontWeight: 900 }}>الدعوات</Typography>
-            </Stack>
-            <Typography variant="h4" sx={{ fontWeight: 900, mt: 1 }}>
-              {stats.pendingInvites}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              عدد الدعوات المعلقة (حسب الدور)
-            </Typography>
-          </Paper>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                alignItems="center"
+                sx={{ color: stat.color }}
+              >
+                {stat.icon}
+                <Typography
+                  sx={{
+                    fontWeight: 900,
+                    color: "text.primary",
+                    fontSize: "1.1rem",
+                  }}
+                >
+                  {stat.title}
+                </Typography>
+              </Stack>
+              <Typography variant="h3" sx={{ fontWeight: 900, mt: 2, mb: 0.5 }}>
+                {stat.value}
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                {stat.desc}
+              </Typography>
+            </Paper>
+          ))}
         </Stack>
       )}
 
-      {/* Recent lists side-by-side */}
+      {/* الجداول السفلية */}
       {!loading && !error && (
         <Stack
           direction={{ xs: "column", lg: "row" }}
           spacing={2}
-          sx={{ mt: 2 }}
+          sx={{ mt: 3 }}
         >
           {/* Recent Projects */}
           <Paper
             elevation={0}
             sx={{
-              p: 2.5,
+              p: 0,
               flex: 1,
               borderRadius: 3,
               border: "1px solid #EAEAEA",
+              overflow: "hidden",
+              ...hoverEffect,
             }}
           >
-            <Stack
-              direction="row"
-              justifyContent="space-between"
-              alignItems="center"
-              sx={{ mb: 1 }}
+            <Box
+              sx={{
+                p: 2.5,
+                borderBottom: "1px solid #EAEAEA",
+                bgcolor: "#FAFAFA",
+              }}
             >
-              <Typography sx={{ fontWeight: 900 }}>آخر المشاريع</Typography>
-              <Button
-                component={RouterLink}
-                to="/dashboard/projects"
-                size="small"
-                variant="outlined"
-                sx={{ borderRadius: 2, fontWeight: 900, textTransform: "none" }}
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
               >
-                عرض الكل
-              </Button>
-            </Stack>
+                <Typography sx={{ fontWeight: 900, fontSize: "1.1rem" }}>
+                  أحدث المشاريع النشطة
+                </Typography>
+                <Button
+                  component={RouterLink}
+                  to="/dashboard/projects"
+                  size="small"
+                  sx={{ fontWeight: 800 }}
+                >
+                  عرض الكل
+                </Button>
+              </Stack>
+            </Box>
 
-            {recentProjects.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                لا توجد مشاريع حالياً.
-              </Typography>
-            ) : (
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 900 }}>المشروع</TableCell>
-                      <TableCell sx={{ fontWeight: 900 }}>الحالة</TableCell>
-                      <TableCell sx={{ fontWeight: 900 }}>فتح</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {recentProjects.map((p) => (
-                      <TableRow key={p.id} hover>
-                        <TableCell sx={{ fontWeight: 800 }}>
-                          {p.title || `Project #${p.id}`}
-                          <Typography
-                            variant="caption"
-                            sx={{ display: "block", color: "text.secondary" }}
-                          >
-                            {p.description || "—"}
-                          </Typography>
+            <Box sx={{ p: recentProjects.length === 0 ? 3 : 0 }}>
+              {recentProjects.length === 0 ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  textAlign="center"
+                >
+                  لا توجد مشاريع حالياً.
+                </Typography>
+              ) : (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: "rgba(0,0,0,0.02)" }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 800, py: 1.5 }}>
+                          اسم المشروع
                         </TableCell>
-                        <TableCell>{statusChip(p.status)}</TableCell>
-                        <TableCell>
-                          <Button
-                            component={RouterLink}
-                            to={`/dashboard/projects/${p.id}`}
-                            size="small"
-                            variant="contained"
-                            sx={{
-                              borderRadius: 2,
-                              fontWeight: 900,
-                              textTransform: "none",
-                            }}
-                          >
-                            Open
-                          </Button>
+                        <TableCell sx={{ fontWeight: 800, py: 1.5 }}>
+                          الحالة
+                        </TableCell>
+                        <TableCell
+                          sx={{ fontWeight: 800, py: 1.5, textAlign: "left" }}
+                        >
+                          إجراء
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+                    </TableHead>
+                    <TableBody>
+                      {recentProjects.map((p) => (
+                        <TableRow
+                          key={p.id}
+                          hover
+                          sx={{ "&:last-child td": { border: 0 } }}
+                        >
+                          <TableCell sx={{ fontWeight: 700 }}>
+                            {p.title || `Project #${p.id}`}
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                display: "block",
+                                color: "text.secondary",
+                                fontWeight: 400,
+                              }}
+                              noWrap
+                            >
+                              {p.description
+                                ? p.description.length > 40
+                                  ? p.description.substring(0, 40) + "..."
+                                  : p.description
+                                : "—"}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{statusChip(p.status)}</TableCell>
+                          <TableCell sx={{ textAlign: "left" }}>
+                            <Button
+                              component={RouterLink}
+                              to={`/dashboard/projects/${p.id}`}
+                              size="small"
+                              variant="contained"
+                              sx={{
+                                borderRadius: 1.5,
+                                fontWeight: 700,
+                                boxShadow: "none",
+                              }}
+                            >
+                              دخول
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
           </Paper>
 
           {/* Recent Tasks */}
           <Paper
             elevation={0}
             sx={{
-              p: 2.5,
+              p: 0,
               flex: 1,
               borderRadius: 3,
               border: "1px solid #EAEAEA",
+              overflow: "hidden",
+              ...hoverEffect,
             }}
           >
-            <Typography sx={{ fontWeight: 900, mb: 1 }}>آخر المهام</Typography>
-
-            {recentTasks.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                لا توجد مهام حالياً.
+            <Box
+              sx={{
+                p: 2.5,
+                borderBottom: "1px solid #EAEAEA",
+                bgcolor: "#FAFAFA",
+              }}
+            >
+              <Typography sx={{ fontWeight: 900, fontSize: "1.1rem" }}>
+                آخر المهام المحدثة
               </Typography>
-            ) : (
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 900 }}>المهمة</TableCell>
-                      <TableCell sx={{ fontWeight: 900 }}>الحالة</TableCell>
-                      <TableCell sx={{ fontWeight: 900 }}>الموعد</TableCell>
-                      <TableCell sx={{ fontWeight: 900 }}>المشروع</TableCell>
-                      <TableCell sx={{ fontWeight: 900 }}>فتح</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {recentTasks.map((t) => (
-                      <TableRow key={t.id} hover>
-                        <TableCell sx={{ fontWeight: 800 }}>
-                          {t.title || `Task #${t.id}`}
+            </Box>
+
+            <Box sx={{ p: recentTasks.length === 0 ? 3 : 0 }}>
+              {recentTasks.length === 0 ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  textAlign="center"
+                >
+                  لا توجد مهام حالياً.
+                </Typography>
+              ) : (
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: "rgba(0,0,0,0.02)" }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 800, py: 1.5 }}>
+                          المهمة
                         </TableCell>
-                        <TableCell>{statusChip(t.status)}</TableCell>
-                        <TableCell>
-                          {t.deadline
-                            ? new Date(t.deadline).toLocaleDateString("ar-EG")
-                            : "—"}
+                        <TableCell sx={{ fontWeight: 800, py: 1.5 }}>
+                          الحالة
                         </TableCell>
-                        <TableCell sx={{ color: "text.secondary" }}>
-                          {t.project_title ||
-                            (t.project_id ? `#${t.project_id}` : "—")}
+                        <TableCell sx={{ fontWeight: 800, py: 1.5 }}>
+                          الارتباط
                         </TableCell>
-                        <TableCell>
-                          {t.project_id ? (
-                            <Button
-                              component={RouterLink}
-                              to={`/dashboard/projects/${t.project_id}`}
-                              size="small"
-                              variant="outlined"
-                              sx={{
-                                borderRadius: 2,
-                                fontWeight: 900,
-                                textTransform: "none",
-                              }}
-                            >
-                              Open
-                            </Button>
-                          ) : (
-                            "—"
-                          )}
+                        <TableCell
+                          sx={{ fontWeight: 800, py: 1.5, textAlign: "left" }}
+                        >
+                          إجراء
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+                    </TableHead>
+                    <TableBody>
+                      {recentTasks.map((t) => (
+                        <TableRow
+                          key={t.id}
+                          hover
+                          sx={{ "&:last-child td": { border: 0 } }}
+                        >
+                          <TableCell sx={{ fontWeight: 700 }}>
+                            {t.title || `Task #${t.id}`}
+                            <Typography
+                              variant="caption"
+                              sx={{ display: "block", color: "text.secondary" }}
+                            >
+                              الموعد:{" "}
+                              {t.deadline
+                                ? new Date(t.deadline).toLocaleDateString(
+                                    "ar-EG",
+                                  )
+                                : "—"}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{statusChip(t.status)}</TableCell>
+                          <TableCell
+                            sx={{
+                              color: "text.secondary",
+                              fontSize: "0.85rem",
+                              maxWidth: 120,
+                            }}
+                            noWrap
+                          >
+                            {t.project_title ||
+                              (t.project_id ? `مشروع #${t.project_id}` : "—")}
+                          </TableCell>
+                          <TableCell sx={{ textAlign: "left" }}>
+                            {t.project_id ? (
+                              <Button
+                                component={RouterLink}
+                                to={`/dashboard/projects/${t.project_id}?tab=tasks`}
+                                size="small"
+                                variant="outlined"
+                                sx={{ borderRadius: 1.5, fontWeight: 700 }}
+                              >
+                                معاينة
+                              </Button>
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
           </Paper>
         </Stack>
       )}

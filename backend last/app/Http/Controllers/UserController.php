@@ -7,6 +7,48 @@ use Illuminate\Http\Request;
 
 class UserController extends Controller
 {
+    // 🎯 1. الدالة الجديدة: جلب كل المستخدمين (لعرضهم في لوحة تحكم المدير)
+    public function index(Request $request)
+    {
+        // نجلب المستخدمين مع صلاحياتهم (role) لنعرضها في الرياكت
+        $users = User::with('role')->orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'users' => $users
+        ], 200);
+    }
+// 🎯 دالة تعديل بيانات المستخدم
+public function update(Request $request, $id)
+{
+    $user = User::find($id);
+    if (!$user) {
+        return response()->json(['message' => 'المستخدم غير موجود'], 404);
+    }
+
+    $request->validate([
+        'name' => 'required|string|max:255',
+        'email' => 'required|email|unique:users,email,' . $id,
+    ]);
+
+    $user->name = $request->name;
+    $user->email = $request->email;
+    $user->save();
+
+    return response()->json(['message' => 'تم تحديث البيانات بنجاح']);
+}
+
+// 🎯 دالة حذف المستخدم
+public function destroy($id)
+{
+    $user = User::find($id);
+    if (!$user) {
+        return response()->json(['message' => 'المستخدم غير موجود'], 404);
+    }
+
+    $user->delete();
+    return response()->json(['message' => 'تم حذف المستخدم بنجاح']);
+}
+ 
     public function supervisors(Request $request)
     {
         // لازم يكون المستخدم مسجل دخول

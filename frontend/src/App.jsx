@@ -6,48 +6,55 @@ import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
 import Notifications from "./pages/Notifications";
 import ProjectDetails from "./pages/ProjectDetails";
-import DashboardLayout from "./Layouts/DashboardLayout";
+import DashboardLayout from "./layouts/DashboardLayout"; // تأكد من حالة الأحرف
 import { useAuth } from "./context/AuthContext";
 import Register from "./pages/Register";
 import Landing from "./pages/Landing";
 import SupervisorInvitations from "./pages/SupervisorInvitations";
 import StudentInvitations from "./pages/StudentInvitations";
 import Profile from "./pages/Profile";
+import CustomThemeProvider from "./context/ThemeContext";
+import Users from "./pages/Users";
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return children;
 }
 
-export default function App({ toggleMode, mode }) {
+export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/login" element={<Login />} />
+    <CustomThemeProvider>
+      <Toaster position="top-center" reverseOrder={false} />
 
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <DashboardLayout toggleMode={toggleMode} mode={mode} />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Dashboard />} />
-        <Route path="profile" element={<Profile />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="projects/:id" element={<ProjectDetails />} />
-        <Route path="notifications" element={<Notifications />} />
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
 
         <Route
-          path="supervisor/invitations"
-          element={<SupervisorInvitations />}
-        />
-        <Route path="student/invitations" element={<StudentInvitations />} />
-      </Route>
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              {/* 🎯 حذفنا التمرير القديم للـ props */}
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="projects/:id" element={<ProjectDetails />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="users" element={<Users />} />
+          <Route
+            path="supervisor/invitations"
+            element={<SupervisorInvitations />}
+          />
+          <Route path="student/invitations" element={<StudentInvitations />} />
+        </Route>
 
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </CustomThemeProvider>
   );
 }

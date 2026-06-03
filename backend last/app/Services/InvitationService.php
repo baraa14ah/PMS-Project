@@ -5,13 +5,11 @@ namespace App\Services;
 use App\Models\Project;
 use App\Models\StudentInvitation;
 use App\Models\SupervisorInvitation;
+use App\Models\ProjectActivity; // 🎯 استدعاء الموديل
 use Illuminate\Support\Facades\DB;
 
 class InvitationService
 {
-    /**
-     * إرسال دعوة لطالب
-     */
     public function inviteStudent($projectId, $studentId, $senderId)
     {
         $project = Project::find($projectId);
@@ -35,9 +33,6 @@ class InvitationService
         return ['status' => 201, 'invitation' => $invitation];
     }
 
-    /**
-     * جلب دعوات الطالب
-     */
     public function getStudentInvitations($studentId)
     {
         return StudentInvitation::where('student_id', $studentId)
@@ -47,9 +42,6 @@ class InvitationService
             ->get();
     }
 
-    /**
-     * قبول دعوة طالب
-     */
     public function acceptStudentInvitation($inviteId, $user)
     {
         $inv = StudentInvitation::find($inviteId);
@@ -67,12 +59,17 @@ class InvitationService
             $inv->update(['status' => 'accepted']);
         });
 
+        // 🎯 تسجيل نشاط انضمام الطالب
+        ProjectActivity::create([
+            'project_id' => $inv->project_id,
+            'user_id' => $user->id,
+            'action' => 'انضم إلى المشروع كعضو فريق',
+            'type' => 'join'
+        ]);
+
         return ['status' => 200, 'message' => 'Accepted'];
     }
 
-    /**
-     * إرسال دعوة لمشرف
-     */
     public function inviteSupervisor($projectId, $supervisorId, $studentId)
     {
         $project = Project::find($projectId);
@@ -94,9 +91,6 @@ class InvitationService
         return ['status' => 201, 'invitation' => $invitation];
     }
 
-    /**
-     * جلب دعوات المشرف
-     */
     public function getSupervisorInvitations($supervisorId)
     {
         return SupervisorInvitation::where('supervisor_id', $supervisorId)
@@ -106,9 +100,6 @@ class InvitationService
             ->get();
     }
 
-    /**
-     * قبول دعوة مشرف
-     */
     public function acceptSupervisorInvitation($inviteId, $user)
     {
         $inv = SupervisorInvitation::where('id', $inviteId)
@@ -122,6 +113,14 @@ class InvitationService
             $inv->update(['status' => 'accepted']);
             Project::where('id', $inv->project_id)->update(['supervisor_id' => $user->id]);
         });
+
+        // 🎯 تسجيل نشاط انضمام المشرف
+        ProjectActivity::create([
+            'project_id' => $inv->project_id,
+            'user_id' => $user->id,
+            'action' => 'انضم إلى المشروع كمشرف',
+            'type' => 'join'
+        ]);
 
         return ['status' => 200, 'message' => 'Accepted'];
     }

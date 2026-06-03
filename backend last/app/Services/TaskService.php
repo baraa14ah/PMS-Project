@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Services;
-
+use App\Models\ProjectActivity;
 use App\Models\Task;
 use App\Models\Project;
 use Illuminate\Support\Facades\DB;
@@ -83,6 +83,14 @@ class TaskService
             'assigned_to' => $user->id,
         ]);
 
+        // 🎯 1. تسجيل النشاط في السجل الزمني
+        ProjectActivity::create([
+            'project_id' => $project->id,
+            'user_id' => $user->id,
+            'action' => "أضاف مهمة جديدة: {$task->title}",
+            'type' => 'create'
+        ]);
+
         $this->notifications->notifyProjectParticipants(
             projectId: (int)$project->id,
             actorUserId: (int)$user->id,
@@ -91,8 +99,6 @@ class TaskService
             body: "{$user->name} أضاف مهمة جديدة: {$task->title}",
             data: ['project_id' => $project->id, 'task_id' => $task->id, 'url' => "/dashboard/projects/{$project->id}"]
         );
-
-        // ✅ هذا هو السطر السحري الذي سيجعل الفرونت إند يرى الاسم فوراً
         $task->load('assignedTo');
 
         return [
@@ -113,13 +119,34 @@ class TaskService
         $oldStatus = $task->status;
         $task->update($data);
 
+        // إذا تم تغيير حالة المهمة فعلياً
         if (isset($data['status']) && $oldStatus !== $task->status) {
+            
+            // 🎯 2. إعداد وتلوين السجل الزمني بناءً على الحالة
+            $activityType = 'update';
+            $statusName = 'قيد الانتظار';
+
+            if ($task->status === 'completed') {
+                $activityType = 'complete';
+                $statusName = 'مكتملة';
+            } elseif ($task->status === 'in_progress') {
+                $activityType = 'progress';
+                $statusName = 'قيد التنفيذ';
+            }
+
+            ProjectActivity::create([
+                'project_id' => $project->id,
+                'user_id' => $user->id,
+                'action' => "غيّر حالة المهمة '{$task->title}' إلى {$statusName}",
+                'type' => $activityType
+            ]);
+
             $this->notifications->notifyProjectParticipants(
                 projectId: (int)$project->id,
                 actorUserId: (int)$user->id,
                 type: 'task.status_changed',
                 title: 'تحديث حالة مهمة',
-                body: "{$user->name} غيّر حالة المهمة '{$task->title}' إلى {$task->status}",
+                body: "{$user->name} غيّر حالة المهمة '{$task->title}' إلى {$statusName}",
                 data: ['project_id' => $project->id, 'task_id' => $task->id, 'new_status' => $task->status, 'url' => "/dashboard/projects/{$project->id}"]
             );
         }
@@ -158,6 +185,14 @@ class TaskService
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
+        // 🎯 3. تسجيل عملية الحذف قبل مسح المهمة من قاعدة البيانات
+        ProjectActivity::create([
+            'project_id' => $projectId,
+            'user_id' => $user->id,
+            'action' => "حذف المهمة: {$task->title}",
+            'type' => 'update' // سيظهر باللون البرتقالي/التحذيري
+        ]);
+
         $task->delete();
 
         return [
@@ -166,6 +201,7 @@ class TaskService
             'new_progress' => $this->calculateProjectProgress($projectId)
         ];
     }
+    
     /**
      * جلب إحصائيات سريعة للمشروع (مهام، إنجاز، تواريخ)
      */

@@ -14,7 +14,7 @@ use App\Http\Controllers\StudentInvitationController;
 use App\Http\Controllers\StudentDirectoryController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\GitHubAuthController;
-
+use App\Http\Controllers\UserController;
 /*
 |--------------------------------------------------------------------------
 | Public Auth Routes
@@ -43,6 +43,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::put('/profile/update', [AuthController::class, 'updateProfile']);
     Route::put('/profile/change-password', [AuthController::class, 'changePassword']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Users
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/users', [UserController::class, 'index']);
+    // ====== مسار إدارة المستخدمين (للمدير) ======
+    Route::get('/users', [UserController::class, 'index']);
+    Route::put('/users/{id}', [UserController::class, 'update']); // 🎯 مسار التعديل
+    Route::delete('/users/{id}', [UserController::class, 'destroy']); // 🎯 مسار الحذف
 
     /*
     |--------------------------------------------------------------------------
@@ -137,7 +148,7 @@ Route::post('/project/{projectId}/leave-supervision', [ProjectController::class,
 
 
 
-
+Route::get('/project/{id}/activities', [ProjectController::class, 'getActivities']);
 
 
 Route::get('/students', [StudentInvitationController::class, 'studentsList']);
