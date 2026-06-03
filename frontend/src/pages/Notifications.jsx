@@ -72,7 +72,7 @@ export default function Notifications() {
 
     // 3. إرسال الطلب بصمت
     try {
-      await fetch(`${API_BASE_URL}/notifications/mark-read/${id}`, {
+      await fetch(`${API_BASE_URL}/notifications/${id}/mark-read`, {
         method: "POST",
         headers: authHeaders,
       });
@@ -333,7 +333,6 @@ export default function Notifications() {
                         sx={{ mt: 1 }}
                         alignItems="center"
                       >
-                        <Chip size="small" variant="outlined" label={type} />
                         <Typography variant="caption" color="text.secondary">
                           {n.created_at
                             ? new Date(n.created_at).toLocaleString("ar-EG")

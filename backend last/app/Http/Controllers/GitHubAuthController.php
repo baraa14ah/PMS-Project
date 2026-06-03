@@ -49,4 +49,18 @@ class GitHubAuthController extends Controller
             return redirect('http://localhost:5173/dashboard/projects?github=error');
         }
     }
+    public function unlink(Request $request)
+    {
+        $user = $request->user();
+        
+        // حماية إضافية: إذا لم يتعرف عليه، يرجع خطأ بدل أن ينهار
+        if (!$user) {
+            return response()->json(['message' => 'غير مصرح لك بالقيام بهذا الإجراء'], 401);
+        }
+
+        $user->github_token = null;
+        $user->save();
+
+        return response()->json(['message' => 'تم إلغاء ربط حساب GitHub بنجاح']);
+    }
 }

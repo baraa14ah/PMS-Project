@@ -139,7 +139,7 @@ class AuthController extends Controller
 
         $user = $request->user();
 
-        // ✅ الشرط كان مقلوب عندك
+       
         if (!Hash::check($request->current_password, $user->password)) {
             return response()->json(['message' => 'Current password is incorrect'], 422);
         }

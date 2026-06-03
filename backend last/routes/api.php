@@ -26,6 +26,7 @@ Route::post('/login', [AuthController::class, 'login']);
 
     Route::get('/auth/github/callback', [GitHubAuthController::class, 'callback']);
     Route::get('/auth/github/redirect', [GitHubAuthController::class, 'redirect']);
+    
 /*
 |--------------------------------------------------------------------------
 | Protected Routes (Sanctum)
@@ -105,7 +106,7 @@ Route::get('/project/{id}/students', [ProjectController::class, 'students']);
     */
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/notifications/unread', [NotificationController::class, 'unread']);
-    Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
     Route::post('/notifications/{id}/mark-read', [NotificationController::class, 'markAsRead']);
     Route::delete('/notifications/delete-all', [NotificationController::class, 'deleteAll']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'delete']);
@@ -153,4 +154,5 @@ Route::get('/students', [StudentInvitationController::class, 'studentsList']);
     //profile
  Route::get('/profile/me', [ProfileController::class, 'me']);
  Route::put('/profile/me', [ProfileController::class, 'update']);
+ Route::post('/profile/unlink-github', [GitHubAuthController::class, 'unlink']);
 });

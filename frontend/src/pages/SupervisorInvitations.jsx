@@ -88,6 +88,7 @@ export default function SupervisorInvitations() {
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));
       toast.success("تم قبول الدعوة بنجاح، أنت الآن مشرف على المشروع!");
+      window.dispatchEvent(new Event("updateSidebarBadges"));
     } catch {
       toast.error("حدث خطأ أثناء قبول الدعوة");
     } finally {
@@ -108,6 +109,7 @@ export default function SupervisorInvitations() {
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));
       toast.success("تم رفض الدعوة بنجاح");
+      window.dispatchEvent(new Event("updateSidebarBadges"));
     } catch {
       toast.error("حدث خطأ أثناء رفض الدعوة");
     } finally {
@@ -117,9 +119,11 @@ export default function SupervisorInvitations() {
 
   if (roleName !== "supervisor" && roleName !== "admin") {
     return (
-      <toast.warning severity="warning" sx={{ borderRadius: 2 }}>
-        هذه الصفحة مخصصة للمشرف فقط.
-      </toast.warning>
+      <Box sx={{ maxWidth: 1200, mx: "auto", mt: 4 }}>
+        <Alert severity="warning" sx={{ borderRadius: 2, fontWeight: "bold" }}>
+          هذه الصفحة مخصصة للمشرفين فقط.
+        </Alert>
+      </Box>
     );
   }
 

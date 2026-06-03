@@ -5,6 +5,7 @@ import {
   Link as RouterLink,
   useLocation,
 } from "react-router-dom";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -56,21 +57,21 @@ export default function ProjectDetails() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get("github") === "success") {
-      Swal.fire({
-        title: "تم الربط بنجاح! 🐙",
-        text: "تم ربط حسابك بـ GitHub بشكل آمن. يمكنك الآن دفع إصدارات مشاريعك مباشرة بضغطة زر.",
-        icon: "success",
-        confirmButtonColor: "#24292e",
-        confirmButtonText: "ممتاز!",
+    const githubStatus = params.get("github");
+
+    if (githubStatus === "success") {
+      // إشعار ناعم يظهر لعدة ثوانٍ ويختفي
+      toast.success("تم ربط حسابك بـ GitHub بنجاح! 🐙", {
+        duration: 5000,
+        style: { fontWeight: "bold" },
       });
-      // تنظيف الرابط بعد ظهور الرسالة
+      // تنظيف الرابط
       window.history.replaceState(null, "", window.location.pathname);
-    } else if (params.get("github") === "error") {
-      Swal.fire({ title: "فشل الربط!", icon: "error" });
+    } else if (githubStatus === "error") {
+      toast.error("فشل ربط حساب GitHub ❌");
       window.history.replaceState(null, "", window.location.pathname);
     }
-  }, [location]);
+  }, [location.search]);
 
   const { token, user } = useAuth();
 
@@ -208,6 +209,24 @@ export default function ProjectDetails() {
     ? [owner, ...membersWithoutOwner]
     : membersWithoutOwner;
   const membersCount = displayMembers.length;
+
+  //-------------------- dialog------------------------
+  // 1. دماغ النافذة: يخزن شكل النافذة وماذا ستفعل عند التأكيد
+  const [dialogConfig, setDialogConfig] = useState({
+    isOpen: false,
+    title: "",
+    content: "",
+    confirmText: "تأكيد",
+    confirmColor: "primary",
+    onConfirm: null,
+  });
+
+  // 2. حالة التحميل (لإظهار كلمة "جاري التنفيذ...")
+  const [dialogLoading, setDialogLoading] = useState(false);
+
+  // 3. دالة إغلاق النافذة
+  const closeDialog = () =>
+    setDialogConfig((prev) => ({ ...prev, isOpen: false }));
 
   // -------------------- Permissions --------------------
   const canInviteSupervisor =
@@ -386,39 +405,45 @@ export default function ProjectDetails() {
       setSavingProject(false);
     }
   };
-
-  const handleDeleteProject = async () => {
+  const handleDeleteProject = () => {
     if (!project?.id) return;
-
-    const result = await Swal.fire({
+    setDialogConfig({
+      isOpen: true,
       title: "حذف المشروع نهائياً؟",
-      text: "تحذير: سيتم حذف كافة المهام والتعليقات والملفات. لا يمكنك الرجوع عن هذا القرار!",
-      icon: "error",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#888",
-      confirmButtonText: "نعم، احذف كل شيء",
-      cancelButtonText: "إلغاء",
+      content:
+        "تحذير: سيتم حذف كافة المهام والتعليقات والملفات. لا يمكنك الرجوع عن هذا القرار!",
+      confirmText: "نعم، احذف كل شيء",
+      confirmColor: "error", // تعادل اللون الأحمر في MUI
+
+      onConfirm: async () => {
+        try {
+          setDialogLoading(true);
+
+          const res = await fetch(
+            `${API_BASE_URL}/project/delete/${project.id}`,
+            {
+              method: "DELETE",
+              headers: authHeaders,
+            },
+          );
+
+          if (!res.ok) {
+            toast.error("تعذر حذف المشروع ❌");
+            return; // نوقف التنفيذ إذا فشل
+          }
+
+          toast.success("تم حذف المشروع بنجاح 👋");
+          closeDialog(); // نغلق النافذة أولاً
+          navigate("/dashboard/projects"); // ثم ننقله لصفحة المشاريع
+        } catch {
+          toast.error("خطأ في الاتصال بالسيرفر 🌐");
+        } finally {
+          setDialogLoading(false); // إيقاف التحميل
+        }
+      },
     });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      setDeletingProject(true);
-      const res = await fetch(`${API_BASE_URL}/project/delete/${project.id}`, {
-        method: "DELETE",
-        headers: authHeaders,
-      });
-      if (!res.ok) return toast.error("تعذر حذف المشروع ❌");
-
-      toast.success("تم حذف المشروع بنجاح 👋");
-      navigate("/dashboard/projects");
-    } catch {
-      toast.error("خطأ في الاتصال بالسيرفر 🌐");
-    } finally {
-      setDeletingProject(false);
-    }
   };
+
   const handleSendSupervisorInvite = async () => {
     setInviteSupervisorMsg("");
     if (!selectedSupervisor)
@@ -473,38 +498,50 @@ export default function ProjectDetails() {
     }
   };
 
-  const handleLeaveSupervision = async () => {
-    const result = await Swal.fire({
+  const handleLeaveSupervision = () => {
+    // التأكد من وجود المشروع أولاً
+    if (!project?.id) return;
+
+    // إرسال الأوامر للنافذة الشاملة
+    setDialogConfig({
+      isOpen: true,
       title: "إلغاء الإشراف؟",
-      text: "هل أنت متأكد من رغبتك في التوقف عن الإشراف على هذا المشروع؟",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#f39c12",
-      cancelButtonColor: "#888",
-      confirmButtonText: "نعم، إلغاء الإشراف",
-      cancelButtonText: "تراجع",
+      content: "هل أنت متأكد من رغبتك في التوقف عن الإشراف على هذا المشروع؟",
+      confirmText: "نعم، إلغاء الإشراف",
+      confirmColor: "warning", // اللون البرتقالي التحذيري في MUI
+
+      onConfirm: async () => {
+        try {
+          setDialogLoading(true); // تشغيل تأثير التحميل
+
+          const res = await fetch(
+            `${API_BASE_URL}/project/${project.id}/leave-supervision`,
+            {
+              method: "POST",
+              headers: authHeaders,
+            },
+          );
+
+          if (!res.ok) {
+            toast.error("تعذر تنفيذ العملية ❌");
+            return;
+          }
+
+          toast.success("تم إلغاء الإشراف بنجاح 👋");
+
+          // تحديث حالة المشروع في الواجهة
+          setProject((prev) =>
+            prev ? { ...prev, supervisor_id: null, supervisor: null } : prev,
+          );
+
+          closeDialog(); // إغلاق النافذة بعد الانتهاء
+        } catch {
+          toast.error("حدث خطأ في الاتصال 🌐");
+        } finally {
+          setDialogLoading(false); // إيقاف التحميل
+        }
+      },
     });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/project/${project.id}/leave-supervision`,
-        {
-          method: "POST",
-          headers: authHeaders,
-        },
-      );
-
-      if (!res.ok) return toast.error("تعذر تنفيذ العملية ❌");
-
-      toast.success("تم إلغاء الإشراف بنجاح 👋");
-      setProject((prev) =>
-        prev ? { ...prev, supervisor_id: null, supervisor: null } : prev,
-      );
-    } catch {
-      toast.error("حدث خطأ في الاتصال 🌐");
-    }
   };
   const updateProgressLocally = async (currentTasks) => {
     const total = currentTasks.length;
@@ -619,42 +656,45 @@ export default function ProjectDetails() {
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    const result = await Swal.fire({
+  const handleDeleteTask = (taskId) => {
+    setDialogConfig({
+      isOpen: true,
       title: "هل أنت متأكد؟",
-      text: "هل تريد فعلاً حذف هذه المهمة؟ لا يمكن التراجع.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#888",
-      confirmButtonText: "نعم، احذفها!",
-      cancelButtonText: "تراجع",
+      content: "هل تريد فعلاً حذف هذه المهمة؟ لا يمكن التراجع.",
+      confirmText: "نعم، احذفها!",
+      confirmColor: "error", // أحمر للحذف
+
+      onConfirm: async () => {
+        try {
+          setDialogLoading(true); // تشغيل تأثير التحميل في الزر
+
+          const res = await fetch(`${API_BASE_URL}/task/delete/${taskId}`, {
+            method: "DELETE",
+            headers: authHeaders,
+          });
+
+          const data = await res.json().catch(() => null);
+
+          if (!res.ok) {
+            toast.error(data?.message || "تعذر حذف المهمة");
+            return; // نوقف التنفيذ إذا حدث خطأ
+          }
+
+          // 🎯 إذا نجح الحذف في السيرفر، نحدث الواجهة (State)
+          const updated = tasks.filter((t) => t.id !== taskId);
+          setTasks(updated);
+          updateProgressLocally(updated);
+
+          toast.success("تم حذف المهمة بنجاح 🗑️");
+          closeDialog(); // إغلاق النافذة بعد النجاح
+        } catch (e) {
+          toast.error("حدث خطأ أثناء الاتصال بالسيرفر");
+        } finally {
+          setDialogLoading(false); // إيقاف التحميل
+        }
+      },
     });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/task/delete/${taskId}`, {
-        method: "DELETE",
-        headers: authHeaders,
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        return toast.error(data?.message || "تعذر حذف المهمة");
-      }
-
-      const updated = tasks.filter((t) => t.id !== taskId);
-      setTasks(updated);
-      updateProgressLocally(updated);
-
-      toast.success("تم حذف المهمة بنجاح 🗑️");
-    } catch (e) {
-      toast.error("حدث خطأ أثناء الاتصال بالسيرفر");
-    }
   };
-
   const handleAddComment = async (e) => {
     e.preventDefault();
 
@@ -685,52 +725,70 @@ export default function ProjectDetails() {
       toast.error("حدث خطأ أثناء الاتصال بالسيرفر 🌐");
     }
   };
-
-  const handleDeleteComment = async (commentId) => {
-    const result = await Swal.fire({
-      title: "حذف التعليق؟",
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      confirmButtonText: "حذف",
-      cancelButtonText: "تراجع",
-    });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/comment/${commentId}`, {
-        method: "DELETE",
-        headers: authHeaders,
-      });
-      if (!res.ok) return toast.error("تعذر حذف التعليق ❌");
-
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
-      toast.success("تم حذف التعليق بنجاح");
-    } catch {
-      toast.error("خطأ في الاتصال 🌐");
-    }
-  };
   const handleUpdateComment = async (commentId) => {
-    if (!editingCommentValue.trim())
+    if (!editingCommentValue.trim()) {
       return toast.error("لا يمكن حفظ تعليق فارغ");
+    }
+
     try {
       const res = await fetch(`${API_BASE_URL}/comment/${commentId}`, {
         method: "PUT",
         headers: { ...authHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ comment: editingCommentValue }),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) return toast.error("تعذر تعديل التعليق");
 
+      if (!res.ok) {
+        return toast.error("تعذر تعديل التعليق");
+      }
       setComments((prev) =>
-        prev.map((c) => (c.id === commentId ? data?.comment || c : c)),
+        prev.map((c) =>
+          c.id === commentId ? { ...c, comment: editingCommentValue } : c,
+        ),
       );
+
+      toast.success("تم تعديل التعليق بنجاح ✏️");
+
+      // إغلاق وضع التعديل وتفريغ الحقل
       setEditingCommentId(null);
       setEditingCommentValue("");
     } catch {
       toast.error("حدث خطأ أثناء التعديل");
     }
+  };
+  const handleDeleteComment = (commentId) => {
+    setDialogConfig({
+      isOpen: true,
+      title: "حذف التعليق؟",
+      content: "هل أنت متأكد أنك تريد حذف هذا التعليق نهائياً؟",
+      confirmText: "حذف",
+      confirmColor: "error", // أحمر
+
+      onConfirm: async () => {
+        try {
+          setDialogLoading(true); // تشغيل التحميل في زر النافذة
+
+          const res = await fetch(`${API_BASE_URL}/comment/${commentId}`, {
+            method: "DELETE",
+            headers: authHeaders,
+          });
+
+          if (!res.ok) {
+            toast.error("تعذر حذف التعليق ❌");
+            return; // إيقاف التنفيذ
+          }
+
+          // تحديث الواجهة فوراً
+          setComments((prev) => prev.filter((c) => c.id !== commentId));
+          toast.success("تم حذف التعليق بنجاح");
+
+          closeDialog(); // إغلاق النافذة بعد النجاح
+        } catch {
+          toast.error("خطأ في الاتصال 🌐");
+        } finally {
+          setDialogLoading(false); // إيقاف التحميل
+        }
+      },
+    });
   };
 
   const handleUploadVersion = async (e) => {
@@ -817,65 +875,90 @@ export default function ProjectDetails() {
     }
   };
 
-  const handleDeleteVersion = async (versionId) => {
-    const result = await Swal.fire({
+  const handleDeleteVersion = (versionId) => {
+    // إرسال الأوامر للنافذة الشاملة
+    setDialogConfig({
+      isOpen: true,
       title: "حذف هذا الإصدار؟",
-      text: "سيتم حذف الملف المرفوع نهائياً.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      confirmButtonText: "نعم، احذف",
-      cancelButtonText: "إلغاء",
+      content: "سيتم حذف الملف المرفوع نهائياً.",
+      confirmText: "نعم، احذف",
+      confirmColor: "error", // أحمر
+
+      onConfirm: async () => {
+        try {
+          setDialogLoading(true); // تشغيل التحميل
+
+          const res = await fetch(
+            `${API_BASE_URL}/project/versions/${versionId}`,
+            {
+              method: "DELETE",
+              headers: authHeaders,
+            },
+          );
+
+          if (!res.ok) {
+            toast.error("فشل حذف الإصدار ❌");
+            return;
+          }
+
+          // تحديث الواجهة فوراً
+          setVersions((prev) => prev.filter((v) => v.id !== versionId));
+          toast.success("تم حذف الإصدار بنجاح 🗑️");
+
+          closeDialog(); // إغلاق النافذة
+        } catch {
+          toast.error("خطأ في الاتصال 🌐");
+        } finally {
+          setDialogLoading(false); // إيقاف التحميل
+        }
+      },
     });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/project/versions/${versionId}`, {
-        method: "DELETE",
-        headers: authHeaders,
-      });
-      if (!res.ok) return toast.error("فشل حذف الإصدار ❌");
-
-      setVersions((prev) => prev.filter((v) => v.id !== versionId));
-      toast.success("تم حذف الإصدار بنجاح 🗑️");
-    } catch {
-      toast.error("خطأ في الاتصال 🌐");
-    }
   };
-  const handlePushToGithub = async (versionId) => {
-    if (!project?.github_repo_url)
+  const handlePushToGithub = (versionId) => {
+    // الفحص الاستباقي قبل فتح النافذة
+    if (!project?.github_repo_url) {
       return toast.error("يرجى إضافة رابط مستودع GitHub للمشروع أولاً.");
-
-    const result = await Swal.fire({
-      title: "رفع إلى GitHub؟",
-      text: "سيتم دفع هذا الملف كإصدار جديد إلى مستودعك على GitHub.",
-      icon: "info",
-      showCancelButton: true,
-      confirmButtonColor: "#24292e",
-      confirmButtonText: "نعم، ارفع الآن",
-      cancelButtonText: "إلغاء",
-    });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      setPushingVersionId(versionId); // تأكد من وجود state بهذا الاسم
-      const res = await fetch(
-        `${API_BASE_URL}/project-versions/${versionId}/push-to-github`,
-        { method: "POST", headers: authHeaders },
-      );
-      const data = await res.json().catch(() => null);
-      if (!res.ok) return toast.error(data?.message || "فشل الرفع إلى GitHub");
-
-      toast.success("🚀 تم دفع الإصدار إلى GitHub بنجاح!");
-    } catch {
-      toast.error("حدث خطأ أثناء الاتصال بالسيرفر");
-    } finally {
-      setPushingVersionId(null);
     }
-  };
 
+    // إرسال الأوامر للنافذة
+    setDialogConfig({
+      isOpen: true,
+      title: "رفع إلى GitHub؟",
+      content: "سيتم دفع هذا الملف كإصدار جديد إلى مستودعك على GitHub.",
+      confirmText: "نعم، ارفع الآن",
+      confirmColor: "primary", // اللون الأزرق القياسي
+
+      onConfirm: async () => {
+        try {
+          setDialogLoading(true); // تشغيل التحميل
+
+          // الكود الخاص بالدفع لجيتهاب (اكتمل بناءً على مساراتك السابقة)
+          const res = await fetch(
+            `${API_BASE_URL}/project/versions/${versionId}/push`,
+            {
+              method: "POST",
+              headers: authHeaders,
+            },
+          );
+
+          const data = await res.json().catch(() => null);
+
+          if (!res.ok) {
+            toast.error(data?.message || "فشل الرفع إلى مستودع GitHub ❌");
+            return;
+          }
+
+          toast.success("تم رفع الإصدار إلى GitHub بنجاح 🚀");
+
+          closeDialog(); // إغلاق النافذة
+        } catch {
+          toast.error("خطأ في الاتصال بالسيرفر 🌐");
+        } finally {
+          setDialogLoading(false); // إيقاف التحميل
+        }
+      },
+    });
+  };
   if (loading) {
     return (
       <Box sx={{ p: 4, display: "flex", justifyContent: "center" }}>
@@ -1889,6 +1972,7 @@ export default function ProjectDetails() {
                             href={v.file_url}
                             target="_blank"
                             rel="noreferrer"
+                            download // 👈 هذه الإضافة الصغيرة مهمة
                           >
                             تحميل
                           </Button>
@@ -1948,6 +2032,16 @@ export default function ProjectDetails() {
           )}
         </Paper>
       </Stack>
+      <ConfirmDialog
+        open={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        content={dialogConfig.content}
+        confirmText={dialogConfig.confirmText}
+        confirmColor={dialogConfig.confirmColor}
+        loading={dialogLoading}
+        onClose={closeDialog}
+        onConfirm={dialogConfig.onConfirm}
+      />
     </Box>
   );
 }

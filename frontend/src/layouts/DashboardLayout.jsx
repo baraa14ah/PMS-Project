@@ -274,6 +274,20 @@ export default function DashboardLayout() {
     if (!token) return;
     fetchUnreadCount();
     fetchInvitationCounts();
+
+    // 1. الدالة التي تقوم بالتحديث عند استلام الإشارة
+    const handleUpdateBadges = () => {
+      fetchInvitationCounts();
+      // (ويمكنك إضافة fetchUnreadCount إذا أردت تحديث كل شيء)
+    };
+
+    // 2. الاستماع للإشارة التي سميناها 'updateSidebarBadges'
+    window.addEventListener("updateSidebarBadges", handleUpdateBadges);
+
+    // 3. تنظيف الاستماع عند إغلاق المكون
+    return () => {
+      window.removeEventListener("updateSidebarBadges", handleUpdateBadges);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -394,8 +408,11 @@ export default function DashboardLayout() {
             .filter((x) => !x.hidden)
             .map((item) => {
               const active =
-                location.pathname === item.to ||
-                location.pathname.startsWith(item.to + "/");
+                item.to === "/dashboard"
+                  ? location.pathname === "/dashboard" ||
+                    location.pathname === "/dashboard/"
+                  : location.pathname === item.to ||
+                    location.pathname.startsWith(item.to + "/");
               return (
                 <ListItemButton
                   key={item.to}

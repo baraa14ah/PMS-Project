@@ -23,28 +23,26 @@ class NotificationController extends Controller
         return response()->json($result);
     }
 
-    /**
-     * تحديد إشعار كـ "مقروء" أو الكل
+  
+ /**
+     * تحديد إشعار واحد كـ "مقروء"
      */
     public function markAsRead(Request $request, $id)
     {
-        // نبحث عن الإشعار غير المقروء الذي يخص هذا المستخدم ونحدثه
-        $notification = $request->user()->unreadNotifications()->where('id', $id)->first();
+        // استدعاء السيرفيس لتحديث إشعار واحد فوراً وبدون تعقيد
+        $this->service->markAsRead($request->user(), $id);
         
-        if ($notification) {
-            $notification->markAsRead(); // هذه دالة جاهزة في لارافيل تغير read_at
-        }
-
         return response()->json([
             'message' => 'تم تحديد الإشعار كمقروء'
         ]);
     }
-/**
+
+    /**
      * تحديد كل الإشعارات كمقروءة
      */
     public function markAllAsRead(Request $request)
     {
-        // نستدعي دالة السيرفيس ونمرر لها المستخدم فقط (بدون ID)
+        // استدعاء السيرفيس بدون تمرير ID لتحديث الكل
         $result = $this->service->markAsRead($request->user());
         
         return response()->json([

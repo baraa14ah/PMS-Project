@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import toast from "react-hot-toast";
 
 // MUI
 import {
@@ -16,6 +17,11 @@ import {
   Avatar,
   IconButton,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
 
 // Icons
@@ -48,7 +54,6 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [msg, setMsg] = useState({ type: "", text: "" });
 
   const [editMode, setEditMode] = useState(false);
 
@@ -70,7 +75,6 @@ export default function Profile() {
   const fetchProfile = async () => {
     setLoading(true);
     setError("");
-    setMsg({ type: "", text: "" });
 
     try {
       const res = await fetch(`${API_BASE_URL}/profile/me`, {
@@ -109,7 +113,6 @@ export default function Profile() {
 
   const handleCancel = () => {
     setEditMode(false);
-    setMsg({ type: "", text: "" });
     // رجّع القيم من آخر شيء محفوظ
     const p = profile || {};
     setForm({
@@ -121,12 +124,9 @@ export default function Profile() {
   };
 
   const handleSave = async () => {
-    setMsg({ type: "", text: "" });
-
     try {
       setSaving(true);
 
-      // جهّز payload، وخلّ حقول الطالب فقط تُرسل للطالب
       const payload = {
         phone: form.phone || null,
         avatar: form.avatar || null,
@@ -152,18 +152,16 @@ export default function Profile() {
           Object.values(data.errors)?.[0] &&
           Object.values(data.errors)?.[0]?.[0];
 
-        setMsg({
-          type: "error",
-          text: firstError || data?.message || "تعذر حفظ البروفايل",
-        });
+        toast.error(firstError || data?.message || "تعذر حفظ البروفايل");
         return;
       }
 
-      setMsg({ type: "success", text: "✅ تم حفظ البروفايل بنجاح" });
+      toast.success("تم حفظ البروفايل بنجاح ✅");
       setProfile(data?.profile || null);
+      setServerUser(data?.user || null);
+
       setEditMode(false);
 
-      // تحديث الفورم من آخر نسخة محفوظة
       const p = data?.profile || {};
       setForm({
         phone: p.phone || "",
@@ -172,9 +170,42 @@ export default function Profile() {
         student_number: p.student_number || "",
       });
     } catch {
-      setMsg({ type: "error", text: "خطأ أثناء الاتصال بالسيرفر" });
+      toast.error("خطأ أثناء الاتصال بالسيرفر");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // =========================
+  // Github Unlink Logic
+  // =========================
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
+
+  const performUnlinkGithub = async () => {
+    setConfirmOpen(false);
+
+    try {
+      setUnlinking(true);
+
+      const res = await fetch(`${API_BASE_URL}/profile/unlink-github`, {
+        method: "POST",
+        headers: authHeaders,
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        toast.error(data?.message || "تعذر إلغاء الربط");
+        return;
+      }
+
+      toast.success("تم إلغاء ربط حساب GitHub بنجاح ✅");
+      fetchProfile();
+    } catch {
+      toast.error("حدث خطأ أثناء الاتصال بالسيرفر");
+    } finally {
+      setUnlinking(false);
     }
   };
 
@@ -210,11 +241,10 @@ export default function Profile() {
   const displayEmail =
     serverUser?.email || serverUser?.user?.email || user?.user?.email || "—";
 
-  // استخراج الـ ID و التوكن لمعرفة حالة الربط
   const currentUserId = serverUser?.id || user?.user?.id;
-  const isGithubConnected = !!(
-    serverUser?.github_token || user?.user?.github_token
-  );
+  const isGithubConnected = serverUser
+    ? !!serverUser.github_token
+    : !!user?.user?.github_token;
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1100, mx: "auto" }}>
@@ -230,7 +260,6 @@ export default function Profile() {
           overflow: "hidden",
         }}
       >
-        {/* subtle background */}
         <Box
           sx={{
             position: "absolute",
@@ -328,18 +357,9 @@ export default function Profile() {
         </Stack>
       </Paper>
 
-      {msg.text && (
-        <Alert
-          severity={msg.type === "error" ? "error" : "success"}
-          sx={{ mt: 2 }}
-        >
-          {msg.text}
-        </Alert>
-      )}
-
       {/* Content */}
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mt: 2 }}>
-        {/* Left card - Profile fields */}
+        {/* Left card */}
         <Paper
           elevation={0}
           sx={{
@@ -401,7 +421,7 @@ export default function Profile() {
           </Stack>
         </Paper>
 
-        {/* Right card - Student fields + GitHub Connection */}
+        {/* Right card */}
         <Stack spacing={2} sx={{ flex: 1 }}>
           <Paper
             elevation={0}
@@ -455,7 +475,7 @@ export default function Profile() {
             )}
           </Paper>
 
-          {/* GitHub Connection Card */}
+          {/* GitHub Connection */}
           <Paper
             elevation={0}
             sx={{
@@ -490,22 +510,68 @@ export default function Profile() {
             ) : (
               <Stack
                 direction="row"
-                spacing={1}
+                spacing={2}
                 alignItems="center"
+                justifyContent="space-between"
                 flexWrap="wrap"
+                sx={{ width: "100%" }}
               >
                 <Chip
                   icon={<CheckCircleIcon />}
-                  label="حساب GitHub مرتبط 🟢"
+                  label="حساب GitHub مرتبط"
                   color="success"
                   variant="outlined"
                   sx={{ fontWeight: 700 }}
                 />
+
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={unlinking}
+                  sx={{ fontWeight: 700, borderRadius: 2 }}
+                >
+                  {unlinking ? "جاري الإلغاء..." : "إلغاء الربط"}
+                </Button>
               </Stack>
             )}
           </Paper>
         </Stack>
       </Stack>
+
+      {/* نافذة تأكيد الإلغاء */}
+      <Dialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>تأكيد إلغاء الربط</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontWeight: 500 }}>
+            هل أنت متأكد أنك تريد إلغاء ربط حساب GitHub الخاص بك؟ ستتوقف ميزات
+            الرفع التلقائي للإصدارات الخاصة بمشاريعك.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setConfirmOpen(false)}
+            color="inherit"
+            sx={{ fontWeight: 700, borderRadius: 2 }}
+          >
+            تراجع
+          </Button>
+          <Button
+            onClick={performUnlinkGithub}
+            color="error"
+            variant="contained"
+            sx={{ fontWeight: 700, borderRadius: 2 }}
+            disableElevation
+          >
+            نعم، إلغاء الربط
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
