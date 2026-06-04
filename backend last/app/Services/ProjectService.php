@@ -3,8 +3,13 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Models\Task;
+use App\Models\User;
+use App\Services\StudentService;
 use App\Repositories\ProjectRepository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class ProjectService
 {
@@ -25,6 +30,7 @@ class ProjectService
         ]);
 
         $data['user_id'] = $request->user()->id;
+        $data['university_id'] = $request->user()->university_id;
         $data['status']  = 'pending';
 
         return $this->projects->create($data);
@@ -33,6 +39,63 @@ class ProjectService
     public function listForUser($user)
     {
         return $this->projects->getForUser($user);
+    }
+
+    /** Projects for index API with progress in one query (no N+1). */
+    public function listForIndex(User $user): Collection
+    {
+        $roleName = strtolower($user->role?->name ?? '');
+        $query = Project::query()->with(['user:id,name,email', 'supervisor:id,name,email']);
+
+        if ($roleName === 'super_admin') {
+            $query->with('university:id,name');
+        } elseif ($roleName === 'supervisor' || $roleName === 'manager') {
+            $query->where('supervisor_id', $user->id);
+        } elseif ($roleName === 'student') {
+            $query->where(function (Builder $q) use ($user) {
+                $q->where('user_id', $user->id)
+                    ->orWhereHas('members', function (Builder $memberQ) use ($user) {
+                        $memberQ->where('users.id', $user->id)
+                            ->where('project_members.status', 'accepted');
+                    });
+            });
+        }
+
+        $projects = $query->orderByDesc('created_at')->get();
+
+        return $this->attachProgressMetrics($projects);
+    }
+
+    public function attachProgressMetrics(Collection $projects): Collection
+    {
+        if ($projects->isEmpty()) {
+            return $projects;
+        }
+
+        $ids = $projects->pluck('id');
+        $counts = Task::query()
+            ->whereIn('project_id', $ids)
+            ->selectRaw('project_id')
+            ->selectRaw('COUNT(*) as total_tasks')
+            ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_tasks")
+            ->groupBy('project_id')
+            ->get()
+            ->keyBy('project_id');
+
+        return $projects->map(function (Project $project) use ($counts) {
+            $row = $counts->get($project->id);
+            $total = (int) ($row->total_tasks ?? 0);
+            $completed = (int) ($row->completed_tasks ?? 0);
+
+            $project->setAttribute('total_tasks', $total);
+            $project->setAttribute('completed_tasks', $completed);
+            $project->setAttribute(
+                'progress_percentage',
+                $total > 0 ? round(($completed / $total) * 100, 2) : 0,
+            );
+
+            return $project;
+        });
     }
 
     public function update(Request $request, int $id, $user)
@@ -83,7 +146,7 @@ class ProjectService
 
     public function progress(int $id): ?array
     {
-        $project = Project::with('tasks')->find($id);
+        $project = Project::query()->with('tasks')->whereKey($id)->first();
 
         if (!$project) {
             return null;
@@ -123,14 +186,14 @@ class ProjectService
     }
     public function getProjectFullDetails(int $id)
     {
-        return Project::with([
+        return Project::query()->with([
             'user:id,name,email',
             'supervisor:id,name,email',
             'tasks',
             'comments.user:id,name',
             'versions.user:id,name',
             'members'
-        ])->find($id);
+        ])->whereKey($id)->first();
     }
 
     // ✅ الدالة المفقودة 2: حساب التقدم (لأن الكنترولر يطلبها بهذا الاسم)
@@ -143,38 +206,18 @@ class ProjectService
      * جلب الطلاب المتاحين للدعوة فقط
      * (يستبعد المالك، ويستبعد الأعضاء الحاليين في المشروع)
      */
-    public function getAvailableStudentsForInvite(int $projectId)
+    public function getAvailableStudentsForInvite(int $projectId, ?string $search = null)
     {
-        // 1. جلب أرقام الطلاب المسجلين فعلياً في هذا المشروع من جدول الوسيط
-        $existingMemberIds = \Illuminate\Support\Facades\DB::table('project_members')
-            ->where('project_id', $projectId)
-            ->pluck('student_id')
-            ->toArray();
+        $students = app(StudentService::class)->getAvailableStudents($projectId, $search);
 
-        // 2. جلب رقم صاحب المشروع (المالك) لضمان استبعاده أيضاً
-        $project = \App\Models\Project::find($projectId);
-        $ownerId = $project ? $project->user_id : null;
-
-        // 3. دمج القائمتين في مصفوفة واحدة للاستبعاد
-        $excludeIds = array_unique(array_merge($existingMemberIds, [$ownerId]));
-        // تنظيف المصفوفة من أي قيم null
-        $excludeIds = array_filter($excludeIds);
-
-        // 4. جلب الطلاب الذين ليسوا ضمن قائمة الاستبعاد
-        return \App\Models\User::whereNotIn('id', $excludeIds)
-            ->get()
-            ->filter(function ($user) {
-                // التأكد من أن الدور هو "طالب"
-                $roleName = is_string($user->role) ? strtolower($user->role) : strtolower($user->role?->name ?? '');
-                return $roleName === 'student';
-            })
-            ->map(function ($user) {
-                return [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                ];
-            })
+        return $students
+            ->map(fn ($user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'student_number' => $user->student_number,
+                'university_id' => $user->university_id,
+            ])
             ->values();
     }
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 
@@ -35,27 +35,23 @@ import PhotoCameraRoundedIcon from "@mui/icons-material/PhotoCameraRounded";
 import GitHubIcon from "@mui/icons-material/GitHub";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-
 export default function Profile() {
-  const { token, user } = useAuth();
+  const { token, user, authHeaders, apiFetch, API_BASE_URL } = useAuth();
 
   const role = (user?.role || "").toLowerCase(); // "student" / "admin" / "supervisor"
   const isStudent = role === "student";
-
-  const authHeaders = useMemo(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    }),
-    [token],
-  );
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const [editMode, setEditMode] = useState(false);
+  const [pwdForm, setPwdForm] = useState({
+    current_password: "",
+    new_password: "",
+    new_password_confirmation: "",
+  });
+  const [pwdSaving, setPwdSaving] = useState(false);
 
   // server data
   const [serverUser, setServerUser] = useState(null);
@@ -77,10 +73,9 @@ export default function Profile() {
     setError("");
 
     try {
-      const res = await fetch(`${API_BASE_URL}/profile/me`, {
-        headers: authHeaders,
+      const { res, data } = await apiFetch(`${API_BASE_URL}/profile/me`, {
+        headers: authHeaders(),
       });
-      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
         setError(data?.message || "تعذر جلب بيانات البروفايل");
@@ -97,7 +92,8 @@ export default function Profile() {
         phone: p.phone || "",
         avatar: p.avatar || "",
         university_name: p.university_name || "",
-        student_number: p.student_number || "",
+        student_number:
+          data?.user?.student_number || p.student_number || "",
       });
     } catch {
       setError("حدث خطأ في الاتصال بالسيرفر");
@@ -113,13 +109,13 @@ export default function Profile() {
 
   const handleCancel = () => {
     setEditMode(false);
-    // رجّع القيم من آخر شيء محفوظ
     const p = profile || {};
     setForm({
       phone: p.phone || "",
       avatar: p.avatar || "",
       university_name: p.university_name || "",
-      student_number: p.student_number || "",
+      student_number:
+        serverUser?.student_number || p.student_number || "",
     });
   };
 
@@ -131,20 +127,15 @@ export default function Profile() {
         phone: form.phone || null,
         avatar: form.avatar || null,
         ...(isStudent
-          ? {
-              university_name: form.university_name || null,
-              student_number: form.student_number || null,
-            }
+          ? { university_name: form.university_name || null }
           : {}),
       };
 
-      const res = await fetch(`${API_BASE_URL}/profile/me`, {
+      const { res, data } = await apiFetch(`${API_BASE_URL}/profile/me`, {
         method: "PUT",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
-
-      const data = await res.json().catch(() => null);
 
       if (!res.ok) {
         const firstError =
@@ -188,12 +179,10 @@ export default function Profile() {
     try {
       setUnlinking(true);
 
-      const res = await fetch(`${API_BASE_URL}/profile/unlink-github`, {
-        method: "POST",
-        headers: authHeaders,
-      });
-
-      const data = await res.json().catch(() => null);
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/profile/unlink-github`,
+        { method: "POST", headers: authHeaders() },
+      );
 
       if (!res.ok) {
         toast.error(data?.message || "تعذر إلغاء الربط");
@@ -460,9 +449,9 @@ export default function Profile() {
 
                 <TextField
                   label="الرقم الجامعي"
-                  value={form.student_number}
-                  onChange={setField("student_number")}
-                  disabled={!editMode}
+                  value={form.student_number || serverUser?.student_number || ""}
+                  disabled
+                  helperText="يُحدَّد عند التسجيل ولا يمكن تغييره من هنا"
                   InputProps={{
                     startAdornment: (
                       <BadgeRoundedIcon
@@ -473,6 +462,90 @@ export default function Profile() {
                 />
               </Stack>
             )}
+          </Paper>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.6,
+              borderRadius: 4,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Typography sx={{ fontWeight: 900, mb: 1 }}>
+              تغيير كلمة المرور
+            </Typography>
+            <Divider sx={{ my: 2 }} />
+            <Stack spacing={2}>
+              <TextField
+                label="كلمة المرور الحالية"
+                type="password"
+                value={pwdForm.current_password}
+                onChange={(e) =>
+                  setPwdForm((p) => ({
+                    ...p,
+                    current_password: e.target.value,
+                  }))
+                }
+              />
+              <TextField
+                label="كلمة المرور الجديدة"
+                type="password"
+                value={pwdForm.new_password}
+                onChange={(e) =>
+                  setPwdForm((p) => ({ ...p, new_password: e.target.value }))
+                }
+              />
+              <TextField
+                label="تأكيد كلمة المرور الجديدة"
+                type="password"
+                value={pwdForm.new_password_confirmation}
+                onChange={(e) =>
+                  setPwdForm((p) => ({
+                    ...p,
+                    new_password_confirmation: e.target.value,
+                  }))
+                }
+              />
+              <Button
+                variant="contained"
+                disabled={pwdSaving}
+                onClick={async () => {
+                  try {
+                    setPwdSaving(true);
+                    const { res, data } = await apiFetch(
+                      `${API_BASE_URL}/profile/change-password`,
+                      {
+                        method: "PUT",
+                        headers: authHeaders({
+                          "Content-Type": "application/json",
+                        }),
+                        body: JSON.stringify(pwdForm),
+                      },
+                    );
+                    if (!res.ok) {
+                      throw new Error(
+                        data?.message || "تعذر تغيير كلمة المرور",
+                      );
+                    }
+                    toast.success("تم تحديث كلمة المرور");
+                    setPwdForm({
+                      current_password: "",
+                      new_password: "",
+                      new_password_confirmation: "",
+                    });
+                  } catch (e) {
+                    toast.error(e.message);
+                  } finally {
+                    setPwdSaving(false);
+                  }
+                }}
+                sx={{ fontWeight: 800, alignSelf: "flex-start" }}
+              >
+                {pwdSaving ? "جاري الحفظ..." : "حفظ كلمة المرور"}
+              </Button>
+            </Stack>
           </Paper>
 
           {/* GitHub Connection */}

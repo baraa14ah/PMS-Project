@@ -2,21 +2,27 @@
 
 namespace App\Services;
 
+use App\Models\Project;
+use App\Models\Rating;
 use App\Repositories\RatingRepository;
 use Illuminate\Http\Request;
-use App\Models\Rating;
 
 class RatingService
-{protected $ratings;
+{
+    protected RatingRepository $ratings;
 
     public function __construct(RatingRepository $ratings)
     {
         $this->ratings = $ratings;
     }
 
-    public function rateProject(Request $request, $projectId)
+    public function rateProject(Request $request, int $projectId)
     {
-        // إذا كان المستخدم قيّم المشروع قبل → نمنع
+        $project = Project::query()->whereKey($projectId)->first();
+        if (!$project) {
+            return 'not_found';
+        }
+
         $existing = $this->ratings->findByUserAndProject(
             $request->user()->id,
             $projectId
@@ -33,8 +39,14 @@ class RatingService
         ]);
     }
 
-    public function delete(Rating $rating)
+    public function delete(int $id): bool
     {
+        $rating = $this->ratings->find($id);
+
+        if (!$rating) {
+            return false;
+        }
+
         return $this->ratings->delete($rating);
     }
 }

@@ -12,16 +12,28 @@ class InvitationService
 {
     public function inviteStudent($projectId, $studentId, $senderId)
     {
-        $project = Project::find($projectId);
+        $project = Project::query()->whereKey($projectId)->first();
         if (!$project) return ['status' => 404, 'message' => 'Project not found'];
 
         if ((int)$studentId === (int)$project->user_id) {
             return ['status' => 422, 'message' => 'This student is the project owner'];
         }
 
+        $studentAllowed = \App\Models\User::query()
+            ->whereKey($studentId)
+            ->where('status', 'active')
+            ->whereHas('role', fn ($q) => $q->where('name', 'student'))
+            ->inUniversity($project->university_id)
+            ->exists();
+        if (!$studentAllowed) {
+            return ['status' => 422, 'message' => 'Student is not affiliated with this university.'];
+        }
+
         $isMember = DB::table('project_members')
-            ->where('project_id', $projectId)
-            ->where('student_id', $studentId)
+            ->join('projects', 'project_members.project_id', '=', 'projects.id')
+            ->where('projects.id', $projectId)
+            ->where('projects.university_id', auth()->user()->university_id)
+            ->where('project_members.student_id', $studentId)
             ->exists();
         if ($isMember) return ['status' => 422, 'message' => 'Student already in this project'];
 
@@ -35,7 +47,8 @@ class InvitationService
 
     public function getStudentInvitations($studentId)
     {
-        return StudentInvitation::where('student_id', $studentId)
+        return StudentInvitation::query()->forCurrentUniversity()
+            ->where('student_id', $studentId)
             ->where('status', 'pending')
             ->with(['project:id,title', 'sender:id,name,email'])
             ->orderBy('created_at', 'desc')
@@ -44,9 +57,9 @@ class InvitationService
 
     public function acceptStudentInvitation($inviteId, $user)
     {
-        $inv = StudentInvitation::find($inviteId);
+        $inv = StudentInvitation::query()->forCurrentUniversity()->whereKey($inviteId)->first();
         if (!$inv || (int)$inv->student_id !== (int)$user->id) {
-            return ['status' => 403, 'message' => 'Unauthorized'];
+            return ['status' => 404, 'message' => 'Resource not found.'];
         }
 
         if ($inv->status !== 'pending') return ['status' => 422, 'message' => 'Processed already'];
@@ -72,10 +85,21 @@ class InvitationService
 
     public function inviteSupervisor($projectId, $supervisorId, $studentId)
     {
-        $project = Project::find($projectId);
+        $project = Project::query()->whereKey($projectId)->first();
         if (!$project) return ['status' => 404, 'message' => 'Project not found'];
 
-        $exists = SupervisorInvitation::where('project_id', $projectId)
+        $supervisorAllowed = \App\Models\User::query()
+            ->whereKey($supervisorId)
+            ->where('status', 'active')
+            ->whereHas('role', fn ($q) => $q->where('name', 'supervisor'))
+            ->inUniversity($project->university_id)
+            ->exists();
+        if (!$supervisorAllowed) {
+            return ['status' => 422, 'message' => 'Supervisor is not affiliated with this university.'];
+        }
+
+        $exists = SupervisorInvitation::query()->forCurrentUniversity()
+            ->where('project_id', $projectId)
             ->where('supervisor_id', $supervisorId)
             ->where('status', 'pending')
             ->exists();
@@ -93,7 +117,8 @@ class InvitationService
 
     public function getSupervisorInvitations($supervisorId)
     {
-        return SupervisorInvitation::where('supervisor_id', $supervisorId)
+        return SupervisorInvitation::query()->forCurrentUniversity()
+            ->where('supervisor_id', $supervisorId)
             ->where('status', 'pending')
             ->with(['project:id,title', 'student:id,name,email'])
             ->orderBy('created_at', 'desc')
@@ -102,16 +127,17 @@ class InvitationService
 
     public function acceptSupervisorInvitation($inviteId, $user)
     {
-        $inv = SupervisorInvitation::where('id', $inviteId)
+        $inv = SupervisorInvitation::query()->forCurrentUniversity()
+            ->where('id', $inviteId)
             ->where('supervisor_id', $user->id)
             ->where('status', 'pending')
             ->first();
 
-        if (!$inv) return ['status' => 404, 'message' => 'Invitation not found'];
+        if (!$inv) return ['status' => 404, 'message' => 'Resource not found.'];
 
         DB::transaction(function () use ($inv, $user) {
             $inv->update(['status' => 'accepted']);
-            Project::where('id', $inv->project_id)->update(['supervisor_id' => $user->id]);
+            Project::query()->whereKey($inv->project_id)->update(['supervisor_id' => $user->id]);
         });
 
         // 🎯 تسجيل نشاط انضمام المشرف

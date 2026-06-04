@@ -1,80 +1,89 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
+import PageHeader from "../components/PageHeader";
 import {
   Box,
   Paper,
   Typography,
   Stack,
   Button,
-  Divider,
   Chip,
   CircularProgress,
   Alert,
+  Tabs,
+  Tab,
+  IconButton,
+  Tooltip,
+  alpha,
 } from "@mui/material";
-
+import NotificationsActiveRoundedIcon from "@mui/icons-material/NotificationsActiveRounded";
+import DoneAllRoundedIcon from "@mui/icons-material/DoneAllRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
+import MarkEmailReadRoundedIcon from "@mui/icons-material/MarkEmailReadRounded";
 import EmptyState from "../components/EmptyState";
 import NotificationsOffRoundedIcon from "@mui/icons-material/NotificationsOffRounded";
-
-const API_BASE_URL = "http://127.0.0.1:8000/api";
+import {
+  parseNotification,
+  resolveNotificationUrl,
+  getNotificationMeta,
+  formatNotificationTime,
+} from "../utils/notifications";
 
 export default function Notifications() {
-  const { token } = useAuth();
+  const { t } = useLanguage();
+  const { token, authHeaders, apiFetch, API_BASE_URL } = useAuth();
   const navigate = useNavigate();
-
-  const { unreadCount, setUnreadCount } = useOutletContext();
-
-  const authHeaders = useMemo(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    }),
-    [token],
-  );
+  const outlet = useOutletContext() || {};
+  const { unreadCount = 0, setUnreadCount = () => {} } = outlet;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState("all");
 
   const fetchAll = async () => {
     try {
       setLoading(true);
       setError("");
-
-      const res = await fetch(`${API_BASE_URL}/notifications`, {
-        headers: authHeaders,
+      const { res, data } = await apiFetch(`${API_BASE_URL}/notifications`, {
+        headers: authHeaders(),
       });
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok)
-        throw new Error(data?.message || "Failed to load notifications");
-
-      setItems(data?.notifications || []);
+      if (!res.ok) throw new Error(data?.message || "تعذر جلب الإشعارات");
+      const list = data?.notifications;
+      setItems(Array.isArray(list) ? list : []);
       if (data?.unread_count !== undefined) {
         setUnreadCount(Number(data.unread_count));
       }
     } catch (e) {
-      setError(e?.message || "Error");
+      setError(e?.message || "خطأ في التحميل");
     } finally {
       setLoading(false);
     }
   };
 
+  const filtered = useMemo(() => {
+    if (filter === "unread") return items.filter((n) => !n.read_at);
+    return items;
+  }, [items, filter]);
+
   const markRead = async (id) => {
     setUnreadCount((prev) => Math.max(0, prev - 1));
-
     setItems((prev) =>
       prev.map((n) =>
         n.id === id ? { ...n, read_at: new Date().toISOString() } : n,
       ),
     );
-
     try {
-      await fetch(`${API_BASE_URL}/notifications/${id}/mark-read`, {
+      await apiFetch(`${API_BASE_URL}/notifications/${id}/mark-read`, {
         method: "POST",
-        headers: authHeaders,
+        headers: authHeaders(),
       });
-    } catch (e) {}
+    } catch {
+      /* ignore */
+    }
   };
 
   const markAll = async () => {
@@ -85,311 +94,233 @@ export default function Notifications() {
         read_at: n.read_at || new Date().toISOString(),
       })),
     );
-
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/notifications/mark-all-read`,
-        {
-          method: "POST",
-          headers: authHeaders,
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("مشكلة من السيرفر أثناء تحديث الإشعارات:", errorData);
-      }
-    } catch (e) {
-      console.error("فشل الاتصال بالسيرفر (مشكلة شبكة):", e);
+      await apiFetch(`${API_BASE_URL}/notifications/mark-all-read`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+    } catch {
+      /* ignore */
     }
   };
 
   const deleteOne = async (id, isUnread) => {
-    if (isUnread) {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    }
-
+    if (isUnread) setUnreadCount((prev) => Math.max(0, prev - 1));
     setItems((prev) => prev.filter((n) => n.id !== id));
-
     try {
-      const response = await fetch(`${API_BASE_URL}/notifications/${id}`, {
+      await apiFetch(`${API_BASE_URL}/notifications/${id}`, {
         method: "DELETE",
-        headers: authHeaders,
+        headers: authHeaders(),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("مشكلة من السيرفر أثناء حذف الإشعار:", errorData);
-      }
-    } catch (e) {
-      console.error("فشل الاتصال بالسيرفر:", e);
+    } catch {
+      /* ignore */
     }
   };
 
   const deleteAll = async () => {
     setItems([]);
     setUnreadCount(0);
-
     try {
-      const response = await fetch(`${API_BASE_URL}/notifications/delete-all`, {
+      await apiFetch(`${API_BASE_URL}/notifications/delete-all`, {
         method: "DELETE",
-        headers: authHeaders,
+        headers: authHeaders(),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("مشكلة من السيرفر أثناء حذف الإشعارات:", errorData);
-      }
-    } catch (e) {
-      console.error("فشل الاتصال بالسيرفر (مشكلة شبكة):", e);
+    } catch {
+      /* ignore */
     }
   };
 
-  const resolveNotificationUrl = (n) => {
-    const payload = n?.data || {};
-    const extra = payload?.data || {};
-
-    const directUrl = extra?.url || payload?.url;
-    if (directUrl) return directUrl;
-
-    const projectId = extra?.project_id;
-    const taskId = extra?.task_id;
-    const commentId = extra?.comment_id;
-    const type = payload?.type || "";
-
-    if (type === "comment.project" && projectId) {
-      return commentId
-        ? `/dashboard/projects/${projectId}?tab=comments&comment_id=${commentId}`
-        : `/dashboard/projects/${projectId}?tab=comments`;
-    }
-
-    if (type === "comment.task" && projectId) {
-      return `/dashboard/projects/${projectId}?tab=tasks${
-        taskId ? `&task_id=${taskId}` : ""
-      }${commentId ? `&comment_id=${commentId}` : ""}`;
-    }
-
-    if (type.startsWith("task.") && projectId) {
-      return `/dashboard/projects/${projectId}?tab=tasks${
-        taskId ? `&task_id=${taskId}` : ""
-      }`;
-    }
-
-    if (projectId) return `/dashboard/projects/${projectId}`;
-    return "/dashboard/notifications";
-  };
-
-  const handleOpenNotification = async (n) => {
-    const url = resolveNotificationUrl(n);
-
-    if (n?.id && !n?.read_at) {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-
-      try {
-        fetch(`${API_BASE_URL}/notifications/mark-read/${n.id}`, {
-          method: "POST",
-          headers: authHeaders,
-        });
-      } catch (e) {}
-    }
-
-    navigate(url);
+  const openNotification = async (n) => {
+    if (n?.id && !n?.read_at) await markRead(n.id);
+    navigate(resolveNotificationUrl(n));
   };
 
   useEffect(() => {
-    if (!token) return;
-    fetchAll();
+    if (token) fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-        <Stack alignItems="center" spacing={2}>
-          <CircularProgress />
-          <Typography color="text.secondary">Loading notifications.</Typography>
-        </Stack>
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
-  }
-
-  const hoverEffect = {
-    transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
-    "&:hover": {
-      transform: "translateY(-4px)",
-      boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
-      borderColor: "white",
-    },
-  };
-
   return (
-    <Box sx={{ maxWidth: 900, mx: "auto" }}>
+    <Box sx={{ maxWidth: 920, mx: "auto" }}>
+      <PageHeader
+        title={t("notifications.title")}
+        subtitle={t("notifications.subtitle")}
+        icon={<NotificationsActiveRoundedIcon />}
+        actions={
+          <Stack direction="row" spacing={1} flexWrap="wrap">
+            <Chip label={`${t("notifications.unread")}: ${unreadCount}`} size="small" sx={{ fontWeight: 800 }} />
+            <Button size="small" startIcon={<RefreshRoundedIcon />} onClick={fetchAll} variant="outlined" sx={{ color: "white", borderColor: "rgba(255,255,255,0.4)" }}>
+              {t("common.refresh")}
+            </Button>
+            <Button size="small" startIcon={<DoneAllRoundedIcon />} onClick={markAll} disabled={!unreadCount} variant="contained" sx={{ bgcolor: "white", color: "#0B1220", fontWeight: 800 }}>
+              {t("notifications.markAllRead")}
+            </Button>
+            <Button size="small" startIcon={<DeleteOutlineRoundedIcon />} onClick={deleteAll} disabled={!items.length} color="error" variant="outlined" sx={{ borderColor: "rgba(255,255,255,0.4)", color: "#FECACA" }}>
+              {t("notifications.deleteAll")}
+            </Button>
+          </Stack>
+        }
+      />
+
       <Paper
         elevation={0}
-        sx={{ p: 2.5, borderRadius: 3, border: "1px solid #EAEAEA" }}
+        sx={{
+          borderRadius: 4,
+          border: "1px solid",
+          borderColor: "divider",
+          overflow: "hidden",
+        }}
       >
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
+        <Tabs
+          value={filter}
+          onChange={(_, v) => setFilter(v)}
+          sx={{
+            px: 2,
+            borderBottom: "1px solid #EAEAEA",
+            "& .MuiTab-root": { fontWeight: 800 },
+          }}
         >
-          <Typography variant="h6" sx={{ fontWeight: 900 }}>
-            Notifications
-          </Typography>
-
-          <Stack direction="row" spacing={1}>
-            <Chip
-              label={`Unread: ${unreadCount}`}
-              color={unreadCount ? "warning" : "default"}
-            />
-            <Button size="small" variant="outlined" onClick={fetchAll}>
-              Refresh
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              onClick={markAll}
-              disabled={!unreadCount}
-            >
-              Mark all read
-            </Button>
-            <Button
-              size="small"
-              color="error"
-              variant="outlined"
-              onClick={deleteAll}
-              disabled={!items.length}
-            >
-              Delete all
-            </Button>
-          </Stack>
-        </Stack>
-
-        <Divider sx={{ my: 2 }} />
-
-        {/* 🎯 هنا تم دمج مكون الفراغ الذكي */}
-        {items.length === 0 ? (
-          <EmptyState
-            icon={<NotificationsOffRoundedIcon />}
-            title="لا توجد إشعارات حالياً"
-            description="أنت على اطلاع بكل جديد! لم تصلك أي إشعارات جديدة حتى هذه اللحظة."
+          <Tab label={t("notifications.all")} value="all" />
+          <Tab
+            label={`${t("notifications.unread")}${unreadCount ? ` (${unreadCount})` : ""}`}
+            value="unread"
           />
-        ) : (
-          <Stack spacing={1}>
-            {items.map((n) => {
-              const payload = n.data || {};
-              const isUnread = !n.read_at;
+        </Tabs>
 
-              const title = payload.title || "Notification";
-              const body = payload.body || "";
+        <Box sx={{ p: { xs: 2, md: 2.5 }, minHeight: 280 }}>
+          {loading && (
+            <Box sx={{ py: 8, textAlign: "center" }}>
+              <CircularProgress />
+              <Typography color="text.secondary" sx={{ mt: 2, fontWeight: 700 }}>
+                {t("common.loading")}
+              </Typography>
+            </Box>
+          )}
 
-              return (
-                <Paper
+          {!loading && error && (
+            <Alert severity="error" action={<Button onClick={fetchAll}>إعادة</Button>}>
+              {error}
+            </Alert>
+          )}
+
+          {!loading && !error && filtered.length === 0 && (
+            <EmptyState
+              icon={<NotificationsOffRoundedIcon />}
+              title={
+                filter === "unread"
+                  ? t("notifications.emptyUnread")
+                  : t("notifications.empty")
+              }
+              description="ستظهر هنا التنبيهات عند المهام والتعليقات والدعوات وغيرها."
+            />
+          )}
+
+          {!loading && !error && filtered.length > 0 && (
+            <Stack spacing={1.5}>
+              {filtered.map((n) => (
+                <NotificationCard
                   key={n.id}
-                  variant="outlined"
-                  onClick={() => handleOpenNotification(n)}
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    borderColor: "#EFEFEF",
-                    bgcolor: isUnread ? "rgba(255,193,7,0.10)" : "transparent",
-                    cursor: "pointer",
-                    // 🎯 دمج صحيح لمتغير hoverEffect
-                    transition: hoverEffect.transition,
-                    "&:hover": {
-                      bgcolor: isUnread
-                        ? "rgba(255,193,7,0.14)"
-                        : "rgba(0,0,0,0.03)",
-                      ...hoverEffect["&:hover"],
-                    },
-                  }}
-                >
-                  <Stack
-                    direction="row"
-                    justifyContent="space-between"
-                    alignItems="flex-start"
-                    spacing={2}
-                    dir="rtl"
-                  >
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography
-                        sx={{ fontWeight: 900, unicodeBidi: "isolate" }}
-                      >
-                        {title}
-                      </Typography>
-
-                      {body ? (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            mt: 0.3,
-                            whiteSpace: "pre-wrap",
-                            unicodeBidi: "isolate",
-                          }}
-                        >
-                          {body}
-                        </Typography>
-                      ) : null}
-
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{ mt: 1 }}
-                        alignItems="center"
-                      >
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ unicodeBidi: "isolate" }}
-                        >
-                          {n.created_at
-                            ? new Date(n.created_at).toLocaleString("ar-EG")
-                            : ""}
-                        </Typography>
-                      </Stack>
-                    </Box>
-
-                    <Stack direction="row" spacing={1} dir="ltr">
-                      {isUnread && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            markRead(n.id);
-                          }}
-                        >
-                          Mark read
-                        </Button>
-                      )}
-                      <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteOne(n.id, isUnread);
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    </Stack>
-                  </Stack>
-                </Paper>
-              );
-            })}
-          </Stack>
-        )}
+                  notification={n}
+                  onOpen={() => openNotification(n)}
+                  onMarkRead={() => markRead(n.id)}
+                  onDelete={() => deleteOne(n.id, !n.read_at)}
+                />
+              ))}
+            </Stack>
+          )}
+        </Box>
       </Paper>
     </Box>
+  );
+}
+
+function NotificationCard({ notification: n, onOpen, onMarkRead, onDelete }) {
+  const { t } = useLanguage();
+  const { type, title, body } = parseNotification(n);
+  const meta = getNotificationMeta(type);
+  const Icon = meta.icon;
+  const isUnread = !n.read_at;
+
+  return (
+    <Paper
+      elevation={0}
+      onClick={onOpen}
+      sx={{
+        p: 2,
+        borderRadius: 3,
+        cursor: "pointer",
+        border: "1px solid",
+        borderColor: isUnread ? alpha(meta.color, 0.35) : "#EFEFEF",
+        bgcolor: isUnread ? alpha(meta.color, 0.06) : "background.paper",
+        transition: "box-shadow 0.2s, transform 0.2s",
+        "&:hover": {
+          boxShadow: "0 8px 24px rgba(0,0,0,0.07)",
+          transform: "translateY(-2px)",
+        },
+      }}
+    >
+      <Stack direction="row" spacing={2} alignItems="flex-start">
+        <Box
+          sx={{
+            width: 48,
+            height: 48,
+            borderRadius: 2.5,
+            bgcolor: meta.bg,
+            color: meta.color,
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          <Icon />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="flex-start"
+            spacing={1}
+          >
+            <Typography sx={{ fontWeight: 900 }}>{title}</Typography>
+            <Chip
+              label={meta.label}
+              size="small"
+              sx={{
+                height: 22,
+                fontWeight: 800,
+                bgcolor: meta.bg,
+                color: meta.color,
+              }}
+            />
+          </Stack>
+          {body ? (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 0.5, lineHeight: 1.7 }}
+            >
+              {body}
+            </Typography>
+          ) : null}
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+            {formatNotificationTime(n.created_at)}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={0.5} onClick={(e) => e.stopPropagation()}>
+          {isUnread && (
+            <Tooltip title={t("notifications.markRead")}>
+              <IconButton size="small" color="primary" onClick={onMarkRead}>
+                <MarkEmailReadRoundedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip title={t("common.delete")}>
+            <IconButton size="small" color="error" onClick={onDelete}>
+              <DeleteOutlineRoundedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </Stack>
+    </Paper>
   );
 }

@@ -84,17 +84,18 @@ class ProfileController extends Controller
 
     return null;
 }
-public function commits($id, Request $request)
-{
-    $project = Project::findOrFail($id);
+    public function commits($id, Request $request)
+    {
+        $project = Project::query()->whereKey($id)->firstOrFail();
 
-    // (اختياري) تحقق صلاحيات: فقط أعضاء المشروع/أدمن
-    // إذا عندك منطق عضوية project_members طبّقه هنا
+        // (اختياري) تحقق صلاحيات: فقط أعضاء المشروع/أدمن
+        // إذا عندك منطق عضوية project_members طبّقه هنا
 
-    $commits = GitCommit::where('project_id', $project->id)
-        ->orderByDesc('committed_at')
-        ->limit(100)
-        ->get();
+        $commits = GitCommit::query()->forCurrentUniversity()
+            ->where('project_id', $project->id)
+            ->orderByDesc('committed_at')
+            ->limit(100)
+            ->get();
 
     return response()->json([
         'project_id' => $project->id,
@@ -105,7 +106,7 @@ public function commits($id, Request $request)
 
 public function syncCommits($id, Request $request)
 {
-    $project = Project::findOrFail($id);
+    $project = Project::query()->whereKey($id)->firstOrFail();
 
     if (!$project->github_repo_url) {
         return response()->json(['message' => 'لا يوجد رابط GitHub لهذا المشروع'], 422);

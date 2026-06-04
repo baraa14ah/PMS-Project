@@ -21,15 +21,14 @@ class StudentDirectoryController extends Controller
         $u = $request->user();
         if (!$u) return false;
 
-        $role = $u->role?->name ?? $u->role;
-
-        return $role === 'admin'
-            || $project->user_id === $u->id
+        return $project->user_id === $u->id
             || $project->supervisor_id === $u->id
             || DB::table('project_members')
-                ->where('project_id', $project->id)
-                ->where('student_id', $u->id)
-                ->where('status', 'accepted')
+                ->join('projects', 'project_members.project_id', '=', 'projects.id')
+                ->where('projects.id', $project->id)
+                ->where('projects.university_id', $u->university_id)
+                ->where('project_members.student_id', $u->id)
+                ->where('project_members.status', 'accepted')
                 ->exists();
     }
 
@@ -38,7 +37,7 @@ class StudentDirectoryController extends Controller
      */
     public function studentsForProject(Request $request, $id)
     {
-        $project = Project::find($id);
+        $project = Project::query()->whereKey($id)->first();
         if (!$project) return response()->json(['message' => 'Project not found'], 404);
 
         if (!$this->canAccess($request, $project)) {

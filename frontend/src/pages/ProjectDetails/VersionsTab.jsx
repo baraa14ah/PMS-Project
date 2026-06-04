@@ -13,6 +13,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import toast from "react-hot-toast";
+import { useAuth } from "../../context/AuthContext";
 
 // Icons
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
@@ -22,8 +23,6 @@ import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-
 export default function VersionsTab({
   projectId,
   project,
@@ -31,13 +30,14 @@ export default function VersionsTab({
   setVersions,
   currentUserId,
   currentRole,
-  authHeaders,
   canUploadVersion,
   normalizeFileUrl,
   setDialogConfig,
   setDialogLoading,
   closeDialog,
 }) {
+  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+
   // ---------------- الحالات (States) ----------------
   const [versionTitle, setVersionTitle] = useState("");
   const [versionNote, setVersionNote] = useState("");
@@ -66,15 +66,14 @@ export default function VersionsTab({
       fd.append("version_description", versionNote || "");
       fd.append("file", versionFile);
 
-      const res = await fetch(
+      const { res, data } = await apiFetch(
         `${API_BASE_URL}/project/${projectId}/versions/upload`,
         {
           method: "POST",
-          headers: authHeaders,
+          headers: authHeaders(),
           body: fd,
         },
       );
-      const data = await res.json().catch(() => null);
       if (!res.ok)
         return setVersionMsg({
           type: "error",
@@ -112,18 +111,17 @@ export default function VersionsTab({
     if (!editVersionTitle.trim()) return toast.error("عنوان الإصدار مطلوب");
     try {
       setSavingEditVersion(true);
-      const res = await fetch(
+      const { res, data } = await apiFetch(
         `${API_BASE_URL}/project/versions/${editingVersionId}`,
         {
           method: "PUT",
-          headers: { ...authHeaders, "Content-Type": "application/json" },
+          headers: authHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             version_title: editVersionTitle,
             version_description: editVersionDesc || null,
           }),
         },
       );
-      const data = await res.json().catch(() => null);
       if (!res.ok) return toast.error("فشل تعديل الإصدار");
 
       setVersions((prev) =>
@@ -151,12 +149,9 @@ export default function VersionsTab({
       onConfirm: async () => {
         try {
           setDialogLoading(true);
-          const res = await fetch(
+          const { res } = await apiFetch(
             `${API_BASE_URL}/project/versions/${versionId}`,
-            {
-              method: "DELETE",
-              headers: authHeaders,
-            },
+            { method: "DELETE", headers: authHeaders() },
           );
 
           if (!res.ok) {
@@ -190,14 +185,10 @@ export default function VersionsTab({
         try {
           setDialogLoading(true);
           setPushingVersionId(versionId);
-          const res = await fetch(
+          const { res, data } = await apiFetch(
             `${API_BASE_URL}/project-versions/${versionId}/push-to-github`,
-            {
-              method: "POST",
-              headers: authHeaders,
-            },
+            { method: "POST", headers: authHeaders() },
           );
-          const data = await res.json().catch(() => null);
 
           if (!res.ok) {
             toast.error(data?.message || "فشل الرفع إلى مستودع GitHub ❌");

@@ -2,62 +2,48 @@ import React from "react";
 import { useLocation, Link as RouterLink } from "react-router-dom";
 import { Breadcrumbs, Link, Typography, Box } from "@mui/material";
 import NavigateBeforeRoundedIcon from "@mui/icons-material/NavigateBeforeRounded";
+import { useLanguage } from "../context/LanguageContext";
 
-// 🎯 قاموس ذكي لترجمة الروابط الإنجليزية إلى واجهة عربية
-const routeNames = {
-  dashboard: "الرئيسية",
-  projects: "المشاريع",
-  tasks: "المهام",
-  notifications: "الإشعارات",
-  profile: "الملف الشخصي",
-  invitations: "الدعوات",
-  students: "الطلاب",
-  supervisors: "المشرفين",
+const ROUTE_KEYS = {
+  dashboard: "breadcrumbs.dashboard",
+  projects: "breadcrumbs.projects",
+  notifications: "breadcrumbs.notifications",
+  profile: "breadcrumbs.profile",
+  users: "breadcrumbs.users",
+  universities: "breadcrumbs.universities",
+  invitations: "breadcrumbs.invitations",
+  supervisor: "breadcrumbs.invitations",
+  student: "breadcrumbs.invitations",
 };
 
 export default function SystemBreadcrumbs() {
   const location = useLocation();
-  // تقسيم الرابط الحالي إلى أجزاء (مثلاً: /dashboard/projects/12)
+  const { t, dir } = useLanguage();
   const pathnames = location.pathname.split("/").filter((x) => x);
 
-  // إذا كنا في الصفحة الرئيسية فقط، قد لا نحتاج لعرض المسار (اختياري، يمكنك إزالته)
   if (pathnames.length <= 1) return null;
 
   return (
-    <Box
-      sx={{
-        mb: 2,
-        px: { xs: 2, md: 3 },
-        maxWidth: "1400px",
-        mx: "auto",
-        width: "100%",
-      }}
-    >
+    <Box sx={{ mb: 2, maxWidth: 1400, mx: "auto", width: "100%" }}>
       <Breadcrumbs
         separator={<NavigateBeforeRoundedIcon fontSize="small" />}
         aria-label="breadcrumb"
-        dir="rtl"
+        dir={dir}
       >
         {pathnames.map((value, index) => {
-          // هل هذا هو آخر عنصر في المسار؟ (الصفحة التي نقف عليها حالياً)
           const isLast = index === pathnames.length - 1;
           const to = `/${pathnames.slice(0, index + 1).join("/")}`;
-
-          // إذا كان الرابط عبارة عن رقم (مثل ID المشروع)، نكتب "التفاصيل"
-          const isId = !isNaN(value);
-          let displayName = routeNames[value] || value;
-          if (isId) displayName = "التفاصيل";
+          const isId = !Number.isNaN(Number(value));
+          const key = ROUTE_KEYS[value];
+          let displayName = key ? t(key) : value;
+          if (isId) displayName = t("breadcrumbs.details");
 
           if (isLast) {
             return (
               <Typography
                 color="text.primary"
                 key={to}
-                sx={{
-                  fontWeight: 800,
-                  fontSize: "0.9rem",
-                  unicodeBidi: "isolate",
-                }}
+                sx={{ fontWeight: 800, fontSize: "0.9rem" }}
               >
                 {displayName}
               </Typography>
@@ -71,7 +57,7 @@ export default function SystemBreadcrumbs() {
               color="inherit"
               to={to}
               key={to}
-              sx={{ display: "flex", alignItems: "center", fontSize: "0.9rem" }}
+              sx={{ fontSize: "0.9rem" }}
             >
               {displayName}
             </Link>

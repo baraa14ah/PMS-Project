@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import toast from "react-hot-toast";
+import { useAuth } from "../../context/AuthContext";
 
 // Icons
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
@@ -18,19 +19,18 @@ import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-
 export default function CommentsTab({
   projectId,
   comments,
   setComments,
   currentUserId,
   currentRole,
-  authHeaders,
   setDialogConfig,
   setDialogLoading,
   closeDialog,
 }) {
+  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+
   // الحالات الخاصة بالتعليقات فقط (تم عزلها هنا لكي لا تزدحم الصفحة الرئيسية)
   const [newComment, setNewComment] = useState("");
   const [commentMsg, setCommentMsg] = useState({ type: "", text: "" });
@@ -43,12 +43,14 @@ export default function CommentsTab({
     if (!newComment.trim()) return toast.error("لا يمكن إرسال تعليق فارغ ⚠️");
 
     try {
-      const res = await fetch(`${API_BASE_URL}/project/${projectId}/comment`, {
-        method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ comment: newComment }),
-      });
-      const data = await res.json().catch(() => null);
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/project/${projectId}/comment`,
+        {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ comment: newComment }),
+        },
+      );
 
       if (!res.ok) return toast.error(data?.message || "تعذر إرسال التعليق ❌");
 
@@ -65,9 +67,9 @@ export default function CommentsTab({
       return toast.error("لا يمكن حفظ تعليق فارغ");
 
     try {
-      const res = await fetch(`${API_BASE_URL}/comment/${commentId}`, {
+      const { res } = await apiFetch(`${API_BASE_URL}/comment/${commentId}`, {
         method: "PUT",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ comment: editingCommentValue }),
       });
 
@@ -96,9 +98,9 @@ export default function CommentsTab({
       onConfirm: async () => {
         try {
           setDialogLoading(true);
-          const res = await fetch(`${API_BASE_URL}/comment/${commentId}`, {
+          const { res } = await apiFetch(`${API_BASE_URL}/comment/${commentId}`, {
             method: "DELETE",
-            headers: authHeaders,
+            headers: authHeaders(),
           });
 
           if (!res.ok) {

@@ -8,14 +8,18 @@ class NotificationRepository
 {
     public function getAll($userId)
     {
-        return DatabaseNotification::where('notifiable_id', $userId)
+        return DatabaseNotification::query()
+            ->where('notifiable_id', $userId)
+            ->where('notifiable_type', \App\Models\User::class)
             ->orderBy('created_at', 'desc')
             ->get();
     }
 
     public function getUnread($userId)
     {
-        return DatabaseNotification::where('notifiable_id', $userId)
+        return DatabaseNotification::query()
+            ->where('notifiable_id', $userId)
+            ->where('notifiable_type', \App\Models\User::class)
             ->whereNull('read_at')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -23,8 +27,10 @@ class NotificationRepository
 
     public function markAsRead($notificationId, $userId)
     {
-        $notification = DatabaseNotification::where('id', $notificationId)
+        $notification = DatabaseNotification::query()
+            ->where('id', $notificationId)
             ->where('notifiable_id', $userId)
+            ->where('notifiable_type', \App\Models\User::class)
             ->first();
 
         if (!$notification) return null;
@@ -35,21 +41,27 @@ class NotificationRepository
 
     public function markAllAsRead($userId)
     {
-        return DatabaseNotification::where('notifiable_id', $userId)
+        return DatabaseNotification::query()
+            ->where('notifiable_id', $userId)
+            ->where('notifiable_type', \App\Models\User::class)
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
     }
 
     public function delete($notificationId, $userId)
     {
-        return DatabaseNotification::where('id', $notificationId)
+        return DatabaseNotification::query()
+            ->where('id', $notificationId)
             ->where('notifiable_id', $userId)
+            ->where('notifiable_type', \App\Models\User::class)
             ->delete();
     }
 
     public function deleteAll($userId)
     {
-        return DatabaseNotification::where('notifiable_id', $userId)
+        return DatabaseNotification::query()
+            ->where('notifiable_id', $userId)
+            ->where('notifiable_type', \App\Models\User::class)
             ->delete();
     }
 }

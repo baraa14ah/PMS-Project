@@ -5,12 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\GitCommit;
-
-
+use App\Models\Concerns\BelongsToUniversity;
 
 class Project extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToUniversity;
 
     protected $fillable = [
         'title',
@@ -19,6 +18,7 @@ class Project extends Model
         'user_id',
         'status',
         'supervisor_id',
+        'university_id',
     ];
     
     /**

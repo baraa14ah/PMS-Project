@@ -1,4 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import {
+  API_BASE_URL,
+  apiFetch,
+  registerStatusBlockedHandler,
+} from "../utils/api";
 
 const AuthContext = createContext();
 
@@ -6,70 +11,149 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [user, setUser] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [role, setRole] = useState(null);
+  const [universityId, setUniversityId] = useState(null);
+  const [universityName, setUniversityName] = useState(null);
+  const [sessionBlock, setSessionBlock] = useState(null);
 
-  const API_BASE_URL = "http://127.0.0.1:8000/api"; // غيّره لو تستخدم localhost
+  const clearSessionFields = () => {
+    setStatus(null);
+    setRole(null);
+    setUniversityId(null);
+    setUniversityName(null);
+    setSessionBlock(null);
+  };
 
-  // =============== جلب بروفايل المستخدم ===============
+  const invalidateSession = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    setLoadingProfile(false);
+    clearSessionFields();
+    localStorage.removeItem("token");
+  }, []);
+
+  const applyProfileData = (data) => {
+    setUser(data);
+    setStatus(data?.user?.status || null);
+    setRole(
+      typeof data?.role === "string"
+        ? data.role
+        : data?.role?.name || null,
+    );
+    setUniversityId(data?.user?.university_id ?? null);
+    setUniversityName(
+      data?.user?.university?.name || data?.university_name || null,
+    );
+    setSessionBlock(null);
+
+    if (data?.user && data.user.university_id == null) {
+      setSessionBlock("no_university");
+    }
+  };
+
+  useEffect(() => {
+    registerStatusBlockedHandler((block) => {
+      if (block?.type === "status") {
+        setStatus(block.status);
+      }
+      if (block?.type === "no_university") {
+        setSessionBlock("no_university");
+      }
+    });
+    return () => registerStatusBlockedHandler(null);
+  }, []);
+
   const fetchUser = async (tok) => {
-    if (!tok) return;
+    if (!tok) return false;
     try {
       setLoadingProfile(true);
-      const res = await fetch(`${API_BASE_URL}/profile`, {
+      const { res, data } = await apiFetch(`${API_BASE_URL}/profile`, {
         headers: {
           Authorization: `Bearer ${tok}`,
           Accept: "application/json",
         },
       });
 
-      const data = await res.json().catch(() => null);
-      console.log("Profile response:", res.status, data);
-
       if (res.ok && data?.user) {
-        // data = { user: {...}, role: "student" }
-        setUser(data);
+        applyProfileData(data);
         setLoadingProfile(false);
-        return data;
-      } else {
-        setUser(null);
-        setLoadingProfile(false);
+        return true;
       }
+
+      if (res.status === 403 && data?.code === "no_university") {
+        setSessionBlock("no_university");
+        setLoadingProfile(false);
+        return true;
+      }
+
+      invalidateSession();
+      setLoadingProfile(false);
+      return false;
     } catch (error) {
       console.error("Error fetching profile:", error);
+      invalidateSession();
       setLoadingProfile(false);
+      return false;
     }
   };
 
-  // =============== تسجيل الدخول ===============
   const login = async (newToken) => {
     setToken(newToken);
     localStorage.setItem("token", newToken);
-    await fetchUser(newToken);
+    const ok = await fetchUser(newToken);
+    if (!ok) {
+      throw new Error("Failed to load profile after login");
+    }
   };
 
-  // =============== تسجيل الخروج ===============
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem("token");
-  };
+  const logout = useCallback(() => {
+    invalidateSession();
+    window.location.replace("/login");
+  }, [invalidateSession]);
 
-  // عند فتح الصفحة أو وجود توكن مخزّن، نجلب البروفايل تلقائيًا
+  const authHeaders = useCallback(
+    (extra = {}) => ({
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      ...extra,
+    }),
+    [token],
+  );
+
   useEffect(() => {
-    if (token && !user) {
+    if (token && !user && !sessionBlock) {
       fetchUser(token);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  const isSuperAdmin = role === "super_admin";
+  const isActive = status === "active";
+  const isPending = status === "pending";
+  const isRejected = status === "rejected";
+
   return (
     <AuthContext.Provider
       value={{
         token,
-        user, // فيه { user: {...}, role: "student" }
+        user,
         login,
         logout,
         isAuthenticated: !!token,
         loadingProfile,
+        status,
+        role,
+        universityId,
+        universityName,
+        sessionBlock,
+        isSuperAdmin,
+        isActive,
+        isPending,
+        isRejected,
+        authHeaders,
+        apiFetch,
+        API_BASE_URL,
       }}
     >
       {children}

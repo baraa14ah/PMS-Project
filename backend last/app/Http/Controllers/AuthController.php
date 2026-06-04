@@ -2,11 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Services\AuthService;
-use Illuminate\Support\Facades\Hash;
 use App\Models\User;
-use App\Models\Role;
+use App\Services\AuthService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -19,65 +18,31 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|unique:users,email',
-            'password' => 'required|min:6',
-            // ✅ نستقبل role كنص بدل role_id
-            'role'     => 'required|in:student,supervisor',
-        ]);
-    
-        // ✅ نحول role إلى role_id من جدول roles
-        $role = Role::where('name', $request->role)->first();
-    
-        if (!$role) {
-            return response()->json(['message' => 'Role not found'], 422);
+        $result = $this->authService->register($request);
+
+        if (isset($result['error'])) {
+            $status = $result['error']['status'];
+            unset($result['error']['status']);
+            return response()->json($result['error'], $status);
         }
-    
-        // ✅ حماية إضافية: ممنوع إنشاء admin حتى لو أحد حاول يمرره
-        if ($role->name === 'admin') {
-            return response()->json(['message' => 'Unauthorized role'], 403);
-        }
-    
-        $user = User::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'password' => bcrypt($request->password),
-            'role_id'  => $role->id,
-        ]);
-    
-        $user->load('role');
-    
-        $token = $user->createToken('auth_token')->plainTextToken;
-    
-        return response()->json([
-            'message' => 'Registered successfully',
-            'token'   => $token,
-            'user'    => $user,
-            'role'    => $user->role?->name,
-        ], 201);
+
+        $httpStatus = $result['status'] ?? 201;
+        unset($result['status']);
+
+        return response()->json($result, $httpStatus);
     }
-    
+
     public function login(Request $request)
     {
-        // AuthService يجب أن يرجع token + user
         $result = $this->authService->login($request);
 
-        // لو الـ service يرجع user كـ array أو model
-        $user = null;
+        $user = $result['user'] ?? null;
 
-        if (is_array($result) && isset($result['user'])) {
-            $user = $result['user'];
-        }
-
-        // إذا user هو Model
         if ($user instanceof User) {
             $user->load('role');
             $result['user'] = $user;
             $result['role'] = $user->role?->name;
-        }
-        // إذا user جاي كـ array (مش Model) نحاول نجيبه من DB
-        elseif (is_array($user) && isset($user['id'])) {
+        } elseif (is_array($user) && isset($user['id'])) {
             $u = User::with('role')->find($user['id']);
             if ($u) {
                 $result['user'] = $u;
@@ -101,11 +66,14 @@ class AuthController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        $user->load('role');
+        $user->load(['role', 'university']);
 
         return response()->json([
             'user' => $user,
             'role' => $user->role?->name,
+            'status' => $user->status,
+            'university_id' => $user->university_id,
+            'university_name' => $user->university?->name,
         ]);
     }
 
@@ -139,7 +107,6 @@ class AuthController extends Controller
 
         $user = $request->user();
 
-       
         if (!Hash::check($request->current_password, $user->password)) {
             return response()->json(['message' => 'Current password is incorrect'], 422);
         }
@@ -148,7 +115,7 @@ class AuthController extends Controller
         $user->save();
 
         return response()->json([
-            'message' => 'Password updated successfully'
+            'message' => 'Password updated successfully',
         ]);
     }
 }

@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToUniversity;
 
 class Task extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToUniversity;
 
     protected $fillable = [
         'title',
@@ -15,8 +16,24 @@ class Task extends Model
         'status',
         'deadline',
         'project_id',
-        'assigned_to'
+        'assigned_to',
+        'university_id',
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($task) {
+            if ($task->project_id && empty($task->university_id)) {
+                $task->university_id = $task->project->university_id;
+            }
+        });
+
+        static::updating(function ($task) {
+            if ($task->isDirty('project_id') && $task->project_id) {
+                $task->university_id = $task->project->university_id;
+            }
+        });
+    }
 
     // المهمة تابعة لمشروع
     public function project()

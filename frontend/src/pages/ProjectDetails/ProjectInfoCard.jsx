@@ -11,8 +11,7 @@ import {
   LinearProgress,
 } from "@mui/material";
 import toast from "react-hot-toast";
-
-const API_BASE_URL = "http://127.0.0.1:8000/api";
+import { useAuth } from "../../context/AuthContext";
 
 export default function ProjectInfoCard({
   project,
@@ -21,8 +20,8 @@ export default function ProjectInfoCard({
   canEditProject,
   canDeleteProject,
   handleDeleteProject,
-  authHeaders,
 }) {
+  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
   // الحالات الخاصة بتعديل المشروع
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState(project?.title || "");
@@ -60,16 +59,18 @@ export default function ProjectInfoCard({
 
     try {
       setSavingProject(true);
-      const res = await fetch(`${API_BASE_URL}/project/update/${project.id}`, {
-        method: "PUT",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: editTitle,
-          description: editDesc,
-          github_repo_url: editGithub || null,
-        }),
-      });
-      const data = await res.json().catch(() => null);
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/project/update/${project.id}`,
+        {
+          method: "PUT",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            title: editTitle,
+            description: editDesc,
+            github_repo_url: editGithub || null,
+          }),
+        },
+      );
       if (!res.ok) return toast.error(data?.message || "تعذر تعديل المشروع");
 
       const updated = data?.project || data;

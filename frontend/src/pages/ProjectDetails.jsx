@@ -41,8 +41,6 @@ import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import FolderZipRoundedIcon from "@mui/icons-material/FolderZipRounded";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-
 export default function ProjectDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -67,13 +65,9 @@ export default function ProjectDetails() {
     }
   }, [location.search]);
 
-  const { token, user } = useAuth();
+  const { token, user, authHeaders, apiFetch, API_BASE_URL } = useAuth();
   const currentUserId = user?.user?.id;
   const currentRole = user?.role;
-  const authHeaders = useMemo(
-    () => ({ Authorization: `Bearer ${token}`, Accept: "application/json" }),
-    [token],
-  );
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -186,49 +180,40 @@ export default function ProjectDetails() {
       try {
         setLoading(true);
         setError("");
-        const [projectRes, tasksRes, progressRes, commentsRes, versionsRes] =
+        const headers = authHeaders();
+        const [projectR, tasksR, progressR, commentsR, versionsR] =
           await Promise.all([
-            fetch(`${API_BASE_URL}/project/${id}`, { headers: authHeaders }),
-            fetch(`${API_BASE_URL}/project/${id}/tasks`, {
-              headers: authHeaders,
-            }),
-            fetch(`${API_BASE_URL}/project/${id}/progress`, {
-              headers: authHeaders,
-            }),
-            fetch(`${API_BASE_URL}/project/${id}/comments`, {
-              headers: authHeaders,
-            }),
-            fetch(`${API_BASE_URL}/project/${id}/versions`, {
-              headers: authHeaders,
-            }),
+            apiFetch(`${API_BASE_URL}/project/${id}`, { headers }),
+            apiFetch(`${API_BASE_URL}/project/${id}/tasks`, { headers }),
+            apiFetch(`${API_BASE_URL}/project/${id}/progress`, { headers }),
+            apiFetch(`${API_BASE_URL}/project/${id}/comments`, { headers }),
+            apiFetch(`${API_BASE_URL}/project/${id}/versions`, { headers }),
           ]);
 
-        const projectJson = await projectRes.json().catch(() => null);
-        if (!projectRes.ok)
-          throw new Error(projectJson?.message || "تعذر جلب بيانات المشروع");
+        if (!projectR.res.ok) {
+          throw new Error(
+            projectR.data?.message || "تعذر جلب بيانات المشروع",
+          );
+        }
 
-        const p = projectJson?.project || projectJson;
+        const p = projectR.data?.project || projectR.data;
         setProject(p);
 
-        if (tasksRes.ok) {
-          const t = await tasksRes.json().catch(() => null);
-          setTasks(t?.tasks || []);
+        if (tasksR.res.ok) {
+          setTasks(tasksR.data?.tasks || []);
         }
-        if (progressRes.ok) {
-          const pr = await progressRes.json().catch(() => null);
+        if (progressR.res.ok) {
           setProgress({
-            total: pr?.total_tasks ?? 0,
-            completed: pr?.completed_tasks ?? 0,
-            percent: pr?.progress_percentage ?? 0,
+            total: progressR.data?.total_tasks ?? 0,
+            completed: progressR.data?.completed_tasks ?? 0,
+            percent: progressR.data?.progress_percentage ?? 0,
           });
         }
-        if (commentsRes.ok) {
-          const c = await commentsRes.json().catch(() => null);
-          setComments(c?.comments || []);
+        if (commentsR.res.ok) {
+          setComments(commentsR.data?.comments || []);
         }
-        if (versionsRes.ok) {
-          const v = await versionsRes.json().catch(() => null);
-          setVersions((v?.versions || []).map(normalizeFileUrl));
+        if (versionsR.res.ok) {
+          setVersions((versionsR.data?.versions || []).map(normalizeFileUrl));
         }
       } catch (e) {
         setError(e?.message || "حدث خطأ غير متوقع");
@@ -237,7 +222,7 @@ export default function ProjectDetails() {
       }
     };
     fetchAll();
-  }, [id, token, navigate, authHeaders]);
+  }, [id, token, navigate, authHeaders, apiFetch, API_BASE_URL]);
 
   const handleLeaveSupervision = () => {
     if (!project?.id) return;
@@ -250,9 +235,9 @@ export default function ProjectDetails() {
       onConfirm: async () => {
         try {
           setDialogLoading(true);
-          const res = await fetch(
+          const { res } = await apiFetch(
             `${API_BASE_URL}/project/${project.id}/leave-supervision`,
-            { method: "POST", headers: authHeaders },
+            { method: "POST", headers: authHeaders() },
           );
           if (!res.ok) {
             toast.error("تعذر تنفيذ العملية ❌");
@@ -283,10 +268,10 @@ export default function ProjectDetails() {
       onConfirm: async () => {
         try {
           setDialogLoading(true);
-          const res = await fetch(`${API_BASE_URL}/project/delete/${id}`, {
-            method: "DELETE",
-            headers: authHeaders,
-          });
+          const { res } = await apiFetch(
+            `${API_BASE_URL}/project/delete/${id}`,
+            { method: "DELETE", headers: authHeaders() },
+          );
           if (!res.ok) {
             toast.error("تعذر حذف المشروع ❌");
             return;
@@ -312,8 +297,8 @@ export default function ProjectDetails() {
     setProgress({ total, completed, percent });
     if (project?.id) {
       try {
-        await fetch(`${API_BASE_URL}/project/${project.id}/progress`, {
-          headers: authHeaders,
+        await apiFetch(`${API_BASE_URL}/project/${project.id}/progress`, {
+          headers: authHeaders(),
         });
       } catch (e) {}
     }

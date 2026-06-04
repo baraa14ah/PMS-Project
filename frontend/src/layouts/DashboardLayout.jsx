@@ -1,12 +1,14 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useThemeMode } from "../context/ThemeContext";
-import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
-import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
-
-// 🎯 استدعاء مكون مسار التنقل الذكي
+import { useLanguage } from "../context/LanguageContext";
 import SystemBreadcrumbs from "../components/SystemBreadcrumbs";
+import NotificationBellMenu from "../components/NotificationBellMenu";
+import BrandLogo from "../components/BrandLogo";
+import LanguageSwitcher from "../components/LanguageSwitcher";
+import { getNavForRole } from "../config/navConfig";
+import { brandColors } from "../theme";
 
 import {
   Box,
@@ -19,317 +21,124 @@ import {
   Divider,
   Avatar,
   IconButton,
-  TextField,
-  InputAdornment,
   Button,
   Stack,
   Menu,
   MenuItem,
   Badge,
   Tooltip,
-  CircularProgress,
+  Chip,
+  alpha,
 } from "@mui/material";
 
-import SearchIcon from "@mui/icons-material/Search";
-import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
-import FolderRoundedIcon from "@mui/icons-material/FolderRounded";
-import NotificationsRoundedIcon from "@mui/icons-material/NotificationsRounded";
-import MailRoundedIcon from "@mui/icons-material/MailRounded";
-import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
-import GroupRoundedIcon from "@mui/icons-material/GroupRounded";
-import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
+import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
+import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
-import SupervisorAccountRoundedIcon from "@mui/icons-material/SupervisorAccountRounded";
-import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 
-const drawerWidth = 280;
-const API_BASE_URL = "http://127.0.0.1:8000/api";
+const drawerWidth = 268;
 
 export default function DashboardLayout() {
-  const { user, token: ctxToken, logout } = useAuth();
+  const {
+    user,
+    token: ctxToken,
+    logout,
+    authHeaders,
+    apiFetch,
+    API_BASE_URL,
+    universityName,
+    isSuperAdmin: isSuperAdminCtx,
+  } = useAuth();
+  const { t } = useLanguage();
   const location = useLocation();
   const navigate = useNavigate();
+  const { mode, toggleTheme } = useThemeMode() || { mode: "light", toggleTheme: () => {} };
 
   const token = ctxToken || localStorage.getItem("token");
+  const roleName = String(user?.role?.name ?? user?.role ?? "").toLowerCase();
+  const isSuperAdmin = isSuperAdminCtx || roleName === "super_admin";
+  const isTenantUser = !isSuperAdmin;
 
-  const authHeaders = useMemo(
+  const displayName = user?.user?.name || user?.name || "User";
+  const roleLabel = t(`roles.${roleName}`, roleName);
+
+  const workspaceLabel = isSuperAdmin
+    ? t("common.platformAdmin")
+    : universityName || null;
+
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [studentInvCount, setStudentInvCount] = useState(0);
+  const [supervisorInvCount, setSupervisorInvCount] = useState(0);
+  const [passwordResetCount, setPasswordResetCount] = useState(0);
+
+  const badges = useMemo(
     () => ({
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
+      unread: unreadCount,
+      supervisorInv: supervisorInvCount,
+      studentInv: studentInvCount,
+      passwordReset: passwordResetCount,
     }),
-    [token],
+    [unreadCount, supervisorInvCount, studentInvCount, passwordResetCount],
   );
 
-  const roleName = String(user?.role?.name ?? user?.role ?? "").toLowerCase();
-  const isAdmin = roleName === "admin";
-  const isSupervisor = roleName === "supervisor";
-  const isStudent = roleName === "student";
+  const navItems = useMemo(() => getNavForRole(roleName), [roleName]);
 
-  const displayName = user?.user?.name || "User";
+  const fetchBadges = async () => {
+    if (!token) return;
+    try {
+      const notifRes = await apiFetch(`${API_BASE_URL}/notifications`, {
+        headers: authHeaders(),
+      });
+      if (notifRes.res.ok) {
+        setUnreadCount(Number(notifRes.data?.unread_count) || 0);
+      }
+      if (isSuperAdmin) return;
+      const { res, data } = await apiFetch(`${API_BASE_URL}/dashboard/badges`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) return;
+      setStudentInvCount(Number(data?.student_invitations) || 0);
+      setSupervisorInvCount(Number(data?.supervisor_invitations) || 0);
+      setPasswordResetCount(Number(data?.password_reset_requests) || 0);
+    } catch (e) {
+      console.error("badges", e);
+    }
+  };
 
-  // =========================
-  // Profile Menu
-  // =========================
-  const [anchorEl, setAnchorEl] = useState(null);
-  const menuOpen = Boolean(anchorEl);
+  useEffect(() => {
+    if (!token) return;
+    fetchBadges();
+    const onUpdate = () => fetchBadges();
+    window.addEventListener("updateSidebarBadges", onUpdate);
+    return () => window.removeEventListener("updateSidebarBadges", onUpdate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, isSuperAdmin]);
 
-  const handleOpenMenu = (e) => setAnchorEl(e.currentTarget);
-  const handleCloseMenu = () => setAnchorEl(null);
+  const resolveBadge = (item) => {
+    if (!item.badgeKey) return 0;
+    return badges[item.badgeKey] ?? 0;
+  };
 
-  const handleGoProfile = () => {
-    handleCloseMenu();
-    navigate("/dashboard/profile");
+  const isActive = (item) => {
+    if (item.end) {
+      return (
+        location.pathname === "/dashboard" || location.pathname === "/dashboard/"
+      );
+    }
+    return (
+      location.pathname === item.to ||
+      location.pathname.startsWith(`${item.to}/`)
+    );
   };
 
   const handleLogout = () => {
-    handleCloseMenu();
+    setAnchorEl(null);
     logout();
-    navigate("/login");
   };
-
-  // 🎯 استدعاء الوضع الليلي
-  const { mode, toggleTheme } = useThemeMode() || {
-    mode: "light",
-    toggleTheme: () => {},
-  };
-
-  // =========================
-  // Notifications
-  // =========================
-  const [notifAnchorEl, setNotifAnchorEl] = useState(null);
-  const notifOpen = Boolean(notifAnchorEl);
-
-  const [notifLoading, setNotifLoading] = useState(false);
-  const [notifError, setNotifError] = useState("");
-  const [latestNotifs, setLatestNotifs] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  const openNotifMenu = (e) => setNotifAnchorEl(e.currentTarget);
-  const closeNotifMenu = () => setNotifAnchorEl(null);
-
-  const parseNotif = (n) => {
-    const d = n?.data || {};
-    const type =
-      d?.type || d?.notification_type || d?.event || d?.event_type || "";
-    const title = d?.title ?? n?.title ?? "Notification";
-    const body = d?.body ?? n?.body ?? d?.message ?? "";
-    return { type, title, body };
-  };
-
-  const fetchUnreadCount = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/notifications`, {
-        headers: authHeaders,
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.unread_count !== undefined) {
-        setUnreadCount(Number(data.unread_count));
-      }
-    } catch (e) {
-      console.error("فشل الاتصال بمسار الإشعارات", e);
-    }
-  };
-
-  const fetchLatestNotifications = async () => {
-    if (!token) return;
-
-    setNotifLoading(true);
-    setNotifError("");
-    try {
-      const res = await fetch(`${API_BASE_URL}/notifications`, {
-        headers: authHeaders,
-      });
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setNotifError(data?.message || "تعذر جلب الإشعارات");
-        setLatestNotifs([]);
-        return;
-      }
-
-      const list = data?.notifications || [];
-      setLatestNotifs(list.slice(0, 3));
-
-      if (data?.unread_count !== undefined) {
-        setUnreadCount(Number(data.unread_count) || 0);
-      }
-    } catch {
-      setNotifError("خطأ أثناء الاتصال بالسيرفر");
-      setLatestNotifs([]);
-    } finally {
-      setNotifLoading(false);
-    }
-  };
-
-  const resolveNotificationUrl = (n) => {
-    const payload = n?.data || {};
-    const extra = payload?.data || {};
-
-    const directUrl = extra?.url || payload?.url;
-    if (directUrl) return directUrl;
-
-    const projectId = extra?.project_id;
-    const taskId = extra?.task_id;
-    const commentId = extra?.comment_id;
-    const type = payload?.type || "";
-
-    if (type === "comment.project" && projectId) {
-      return commentId
-        ? `/dashboard/projects/${projectId}?tab=comments&comment_id=${commentId}`
-        : `/dashboard/projects/${projectId}?tab=comments`;
-    }
-
-    if (type === "comment.task" && projectId) {
-      return `/dashboard/projects/${projectId}?tab=tasks${taskId ? `&task_id=${taskId}` : ""}${commentId ? `&comment_id=${commentId}` : ""}`;
-    }
-
-    if (type.startsWith("task.") && projectId) {
-      return `/dashboard/projects/${projectId}?tab=tasks${taskId ? `&task_id=${taskId}` : ""}`;
-    }
-
-    if (projectId) return `/dashboard/projects/${projectId}`;
-    return "/dashboard/notifications";
-  };
-
-  const handleClickNotification = async (n) => {
-    closeNotifMenu();
-    const url = resolveNotificationUrl(n);
-    navigate(url);
-
-    if (n && !n.read_at) {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-      setLatestNotifs((prev) =>
-        prev.map((item) =>
-          item.id === n.id
-            ? { ...item, read_at: new Date().toISOString() }
-            : item,
-        ),
-      );
-      try {
-        await fetch(`${API_BASE_URL}/notifications/${n.id}/mark-read`, {
-          method: "POST",
-          headers: authHeaders,
-        });
-      } catch (e) {
-        console.error("Failed to mark as read in background");
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (notifOpen) fetchLatestNotifications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notifOpen]);
-
-  // =========================
-  // Invitations
-  // =========================
-  const [studentInvCount, setStudentInvCount] = useState(0);
-  const [supervisorInvCount, setSupervisorInvCount] = useState(0);
-
-  const fetchInvitationCounts = async () => {
-    if (!token) return;
-
-    if (isStudent || isAdmin) {
-      try {
-        const res = await fetch(`${API_BASE_URL}/student/invitations`, {
-          headers: authHeaders,
-        });
-        const data = await res.json().catch(() => null);
-        if (res.ok) {
-          const count =
-            data?.pending_count ??
-            data?.count ??
-            (Array.isArray(data?.invitations) ? data.invitations.length : 0) ??
-            0;
-          setStudentInvCount(Number(count) || 0);
-        }
-      } catch {}
-    }
-
-    if (isSupervisor || isAdmin) {
-      try {
-        const res = await fetch(`${API_BASE_URL}/supervisor/invitations`, {
-          headers: authHeaders,
-        });
-        const data = await res.json().catch(() => null);
-        if (res.ok) {
-          const count =
-            data?.pending_count ??
-            data?.count ??
-            (Array.isArray(data?.invitations) ? data.invitations.length : 0) ??
-            0;
-          setSupervisorInvCount(Number(count) || 0);
-        }
-      } catch {}
-    }
-  };
-
-  useEffect(() => {
-    if (!token) return;
-    fetchUnreadCount();
-    fetchInvitationCounts();
-
-    const handleUpdateBadges = () => {
-      fetchInvitationCounts();
-    };
-    window.addEventListener("updateSidebarBadges", handleUpdateBadges);
-    return () => {
-      window.removeEventListener("updateSidebarBadges", handleUpdateBadges);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  // =========================
-  // Sidebar Nav
-  // =========================
-  const navItems = [
-    { label: "Home", to: "/dashboard", icon: <HomeRoundedIcon /> },
-    {
-      label: "Projects",
-      to: "/dashboard/projects",
-      icon: <FolderRoundedIcon />,
-    },
-    {
-      label: "Notifications",
-      to: "/dashboard/notifications",
-      icon: <NotificationsRoundedIcon />,
-      badge: unreadCount,
-    },
-    {
-      label: "Supervisor Invitations",
-      to: "/dashboard/supervisor/invitations",
-      icon: <SupervisorAccountRoundedIcon />,
-      hidden: !(isSupervisor || isAdmin),
-      badge: supervisorInvCount,
-    },
-    {
-      label: "Student Invitations",
-      to: "/dashboard/student/invitations",
-      icon: <PersonAddAltRoundedIcon />,
-      hidden: !(isStudent || isAdmin),
-      badge: studentInvCount,
-    },
-    {
-      label: "Users Management",
-      to: "/dashboard/users",
-      icon: <GroupRoundedIcon />, // الأيقونة موجودة ومستوردة مسبقاً في الملف
-      hidden: !isAdmin, // هذا السطر يضمن أن المدير فقط هو من يرى هذا الزر
-    },
-  ];
 
   return (
-    // 🎯 تم تغيير لون الخلفية ليتبع الثيم
-    <Box
-      sx={{
-        display: "flex",
-        minHeight: "100vh",
-        bgcolor: "background.default",
-      }}
-    >
-      {/* Sidebar */}
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
       <Drawer
         variant="permanent"
         sx={{
@@ -338,359 +147,224 @@ export default function DashboardLayout() {
           [`& .MuiDrawer-paper`]: {
             width: drawerWidth,
             boxSizing: "border-box",
-            borderRight: "1px solid",
-            borderColor: "divider", // 🎯 يتغير لونه حسب الثيم
-            bgcolor: "background.paper", // 🎯 يتغير لونه حسب الثيم
-            px: 2,
-            py: 2,
+            border: "none",
+            borderInlineEnd: `1px solid`,
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            display: "flex",
+            flexDirection: "column",
           },
         }}
       >
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1}
-          sx={{ px: 1, pb: 1 }}
-        >
-          <Box
-            sx={{
-              width: 10,
-              height: 10,
-              borderRadius: 999,
-              bgcolor: "primary.main",
-            }}
-          />
-          <Typography variant="h6" sx={{ fontWeight: 900 }}>
-            ByteHub
-          </Typography>
-          <Box sx={{ flexGrow: 1 }} />
-          <IconButton onClick={toggleTheme} color="inherit">
-            {mode === "dark" ? (
-              <LightModeRoundedIcon sx={{ color: "#f1c40f" }} />
-            ) : (
-              <DarkModeRoundedIcon />
-            )}
-          </IconButton>
-        </Stack>
-
-        <Divider sx={{ my: 1.5 }} />
-
-        <Stack
-          direction="row"
-          spacing={1.5}
-          alignItems="center"
-          sx={{ px: 1, pb: 1.5 }}
-        >
-          <Avatar sx={{ bgcolor: "primary.main" }}>
-            {(displayName?.[0] || "U").toUpperCase()}
-          </Avatar>
-          <Box>
-            <Typography sx={{ fontWeight: 800, lineHeight: 1.1 }}>
-              {displayName}
-            </Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              Role: {roleName || "—"}
-            </Typography>
-          </Box>
-        </Stack>
-
-        <Divider sx={{ mb: 1 }} />
-
-        <List sx={{ px: 0 }}>
-          {navItems
-            .filter((x) => !x.hidden)
-            .map((item) => {
-              const active =
-                item.to === "/dashboard"
-                  ? location.pathname === "/dashboard" ||
-                    location.pathname === "/dashboard/"
-                  : location.pathname === item.to ||
-                    location.pathname.startsWith(item.to + "/");
-              return (
-                <ListItemButton
-                  key={item.to}
-                  component={NavLink}
-                  to={item.to}
-                  sx={{
-                    borderRadius: 2,
-                    mb: 0.5,
-                    px: 1.25,
-                    bgcolor: active ? "rgba(37, 99, 235, 0.12)" : "transparent",
-                    "&:hover": { bgcolor: "rgba(37, 99, 235, 0.08)" },
-                  }}
-                >
-                  <ListItemIcon
-                    sx={{
-                      minWidth: 40,
-                      color: active ? "secondary.main" : "text.secondary",
-                    }}
-                  >
-                    {item.badge ? (
-                      <Badge
-                        color="error"
-                        badgeContent={item.badge}
-                        max={99}
-                        overlap="circular"
-                      >
-                        {item.icon}
-                      </Badge>
-                    ) : (
-                      item.icon
-                    )}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{
-                      fontWeight: active ? 800 : 600,
-                      color: active ? "secondary.main" : "text.primary",
-                    }}
-                  />
-                </ListItemButton>
-              );
-            })}
-        </List>
-        <Box sx={{ flexGrow: 1 }} />
-        <Divider sx={{ mt: 1 }} />
-        <Button
-          onClick={handleLogout}
-          startIcon={<LogoutRoundedIcon />}
-          sx={{
-            mt: 2,
-            borderRadius: 2,
-            textTransform: "none",
-            fontWeight: 800,
-            justifyContent: "flex-start",
-            px: 1.5,
-          }}
-          variant="outlined"
-          color="inherit"
-          fullWidth
-        >
-          Logout
-        </Button>
-      </Drawer>
-
-      {/* Main Content Area */}
-      <Box sx={{ flexGrow: 1, p: 3 }}>
-        {/* Topbar */}
         <Box
           sx={{
-            bgcolor: "background.paper", // 🎯 يتغير لونه حسب الثيم
+            px: 2,
+            py: 2,
+            background: `linear-gradient(180deg, ${brandColors.navy} 0%, #1E3A5F 100%)`,
+            color: "white",
+          }}
+        >
+          <Stack direction="row" alignItems="center" spacing={1.2}>
+            <BrandLogo size="sm" variant="hero" />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 950, lineHeight: 1.1 }}>
+                {t("common.appName")}
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.8 }} noWrap>
+                {t("common.appTagline")}
+              </Typography>
+            </Box>
+          </Stack>
+        </Box>
+
+        <Stack sx={{ px: 2, py: 2 }} spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Avatar
+              sx={{
+                width: 40,
+                height: 40,
+                bgcolor: brandColors.blue,
+                fontWeight: 900,
+              }}
+            >
+              {(displayName?.[0] || "U").toUpperCase()}
+            </Avatar>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography sx={{ fontWeight: 800, fontSize: 14 }} noWrap>
+                {displayName}
+              </Typography>
+              <Chip
+                label={roleLabel}
+                size="small"
+                sx={{
+                  mt: 0.4,
+                  height: 20,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  bgcolor: alpha(brandColors.teal, 0.15),
+                  color: brandColors.teal,
+                }}
+              />
+              {workspaceLabel && (
+                <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                  {workspaceLabel}
+                </Typography>
+              )}
+            </Box>
+          </Stack>
+
+          <Stack direction="row" spacing={1} alignItems="center">
+            <LanguageSwitcher size="small" sx={{ flex: 1 }} />
+            <Tooltip title={mode === "dark" ? t("common.lightMode") : t("common.darkMode")}>
+              <IconButton size="small" onClick={toggleTheme} sx={{ color: "text.secondary" }}>
+                {mode === "dark" ? <LightModeRoundedIcon fontSize="small" /> : <DarkModeRoundedIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Stack>
+
+        <Divider />
+
+        <List sx={{ px: 1.5, py: 1, flex: 1 }}>
+          {navItems.map((item) => {
+            const active = isActive(item);
+            const Icon = item.icon;
+            const labelKey =
+              isSuperAdmin && item.labelKeySuper ? item.labelKeySuper : item.labelKey;
+            const badge = resolveBadge(item);
+
+            return (
+              <ListItemButton
+                key={item.id}
+                component={NavLink}
+                to={item.to}
+                selected={active}
+                sx={{
+                  mb: 0.5,
+                  py: 1,
+                  "&.Mui-selected": {
+                    bgcolor: alpha(brandColors.blue, 0.12),
+                    borderInlineStart: `3px solid ${brandColors.blue}`,
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: active ? "secondary.main" : "text.secondary" }}>
+                  {badge > 0 ? (
+                    <Badge color="error" badgeContent={badge} max={99}>
+                      <Icon fontSize="small" />
+                    </Badge>
+                  ) : (
+                    <Icon fontSize="small" />
+                  )}
+                </ListItemIcon>
+                <ListItemText
+                  primary={t(labelKey)}
+                  primaryTypographyProps={{
+                    fontWeight: active ? 800 : 600,
+                    fontSize: 14,
+                  }}
+                />
+              </ListItemButton>
+            );
+          })}
+        </List>
+
+        <Box sx={{ p: 2 }}>
+          <Button
+            fullWidth
+            variant="outlined"
+            color="error"
+            startIcon={<LogoutRoundedIcon />}
+            onClick={handleLogout}
+            sx={{ borderRadius: 2, fontWeight: 800, justifyContent: "flex-start", px: 2 }}
+          >
+            {t("common.logout")}
+          </Button>
+        </Box>
+      </Drawer>
+
+      <Box sx={{ flexGrow: 1, p: { xs: 2, md: 3 }, minWidth: 0 }}>
+        <Box
+          sx={{
+            bgcolor: "background.paper",
             border: "1px solid",
-            borderColor: "divider", // 🎯 يتغير لونه حسب الثيم
+            borderColor: "divider",
             borderRadius: 3,
             px: 2,
-            py: 1.5,
+            py: 1.25,
             mb: 3,
             display: "flex",
             alignItems: "center",
             gap: 2,
+            boxShadow: "0 4px 20px rgba(15,23,42,0.04)",
           }}
         >
-          <TextField
-            size="small"
-            placeholder="Search for anything..."
-            sx={{ width: 420, bgcolor: "background.default", borderRadius: 2 }} // 🎯 ذكي
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-          />
           <Box sx={{ flexGrow: 1 }} />
-
-          <Tooltip title="Notifications">
-            <IconButton onClick={openNotifMenu}>
-              <Badge color="error" badgeContent={unreadCount} max={99}>
-                <NotificationsRoundedIcon />
-              </Badge>
-            </IconButton>
-          </Tooltip>
-
-          <Menu
-            anchorEl={notifAnchorEl}
-            open={notifOpen}
-            onClose={closeNotifMenu}
-            PaperProps={{
-              sx: {
-                width: 360,
-                borderRadius: 3,
-                mt: 1,
-                border: "1px solid",
-                borderColor: "divider",
-                overflow: "hidden",
-              },
-            }}
-          >
-            <Box sx={{ px: 2, py: 1.25, bgcolor: "background.default" }}>
-              <Typography sx={{ fontWeight: 900 }}>آخر الإشعارات</Typography>
-            </Box>
-            <Divider />
-
-            {notifLoading && (
-              <Box
-                sx={{ p: 2, display: "flex", gap: 1.5, alignItems: "center" }}
-              >
-                <CircularProgress size={18} />
-                <Typography variant="body2" color="text.secondary">
-                  جارِ التحميل...
-                </Typography>
-              </Box>
-            )}
-
-            {!notifLoading && notifError && (
-              <Box sx={{ p: 2 }}>
-                <Typography variant="body2" color="error">
-                  {notifError}
-                </Typography>
-              </Box>
-            )}
-
-            {!notifLoading && !notifError && latestNotifs.length === 0 && (
-              <Box sx={{ p: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  لا توجد إشعارات بعد.
-                </Typography>
-              </Box>
-            )}
-
-            {!notifLoading &&
-              !notifError &&
-              latestNotifs.map((n) => {
-                const { title, body } = parseNotif(n);
-                const isUnread = !n?.read_at;
-                return (
-                  <MenuItem
-                    key={n?.id}
-                    onClick={() => handleClickNotification(n)}
-                    sx={{
-                      alignItems: "flex-start",
-                      gap: 1.5,
-                      py: 1.2,
-                      borderLeft: isUnread
-                        ? "4px solid"
-                        : "4px solid transparent",
-                      borderLeftColor: isUnread
-                        ? "secondary.main"
-                        : "transparent",
-                      whiteSpace: "normal",
-                    }}
-                  >
-                    <Avatar
-                      sx={{
-                        width: 34,
-                        height: 34,
-                        bgcolor: isUnread ? "secondary.main" : "grey.500",
-                        mt: 0.2,
-                      }}
-                    >
-                      {(title?.[0] || "N").toUpperCase()}
-                    </Avatar>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 900, fontSize: 13 }} noWrap>
-                        {title}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{ color: "text.secondary", fontSize: 12.5 }}
-                        noWrap
-                      >
-                        {body}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                );
-              })}
-            <Divider />
-            <Box sx={{ p: 1.25, display: "flex", gap: 1 }}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={() => {
-                  closeNotifMenu();
-                  navigate("/dashboard/notifications");
-                }}
-                sx={{ borderRadius: 2, fontWeight: 800 }}
-              >
-                View all notifications
-              </Button>
-            </Box>
-          </Menu>
-
-          {/* Profile Area */}
+          <NotificationBellMenu
+            token={token}
+            authHeaders={authHeaders}
+            apiFetch={apiFetch}
+            API_BASE_URL={API_BASE_URL}
+            unreadCount={unreadCount}
+            setUnreadCount={setUnreadCount}
+          />
           <Stack
             direction="row"
             alignItems="center"
             spacing={1}
-            onClick={handleOpenMenu}
+            onClick={(e) => setAnchorEl(e.currentTarget)}
             sx={{
               cursor: "pointer",
-              px: 1,
-              py: 0.6,
+              px: 1.5,
+              py: 0.75,
               borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
               "&:hover": { bgcolor: "action.hover" },
-              userSelect: "none",
             }}
           >
-            <Avatar sx={{ width: 34, height: 34, bgcolor: "primary.main" }}>
+            <Avatar sx={{ width: 32, height: 32, bgcolor: brandColors.navy, fontSize: 14 }}>
               {(displayName?.[0] || "U").toUpperCase()}
             </Avatar>
-            <Box>
-              <Typography sx={{ fontWeight: 800, fontSize: 14 }}>
+            <Box sx={{ display: { xs: "none", sm: "block" } }}>
+              <Typography sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.2 }}>
                 {displayName}
               </Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {roleName || "—"}
+              <Typography variant="caption" color="text.secondary">
+                {roleLabel}
               </Typography>
             </Box>
           </Stack>
-
           <Menu
             anchorEl={anchorEl}
-            open={menuOpen}
-            onClose={handleCloseMenu}
-            transformOrigin={{ horizontal: "right", vertical: "top" }}
-            anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
-            PaperProps={{
-              sx: {
-                mt: 1,
-                minWidth: 220,
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: "divider",
-              },
-            }}
+            open={Boolean(anchorEl)}
+            onClose={() => setAnchorEl(null)}
+            PaperProps={{ sx: { borderRadius: 3, minWidth: 200 } }}
           >
-            <Box sx={{ px: 2, py: 1.4 }}>
-              <Typography sx={{ fontWeight: 900 }}>{displayName}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {roleName || "—"}
-              </Typography>
-            </Box>
-            <Divider />
-            <MenuItem onClick={handleGoProfile}>
-              <ListItemIcon sx={{ minWidth: 34 }}>
-                <AccountCircleRoundedIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary="Profile" />
-            </MenuItem>
-            <Divider />
+            {isTenantUser && (
+              <MenuItem
+                onClick={() => {
+                  setAnchorEl(null);
+                  navigate("/dashboard/profile");
+                }}
+              >
+                <ListItemIcon>
+                  <AccountCircleRoundedIcon fontSize="small" />
+                </ListItemIcon>
+                {t("common.profile")}
+              </MenuItem>
+            )}
             <MenuItem onClick={handleLogout} sx={{ color: "error.main" }}>
-              <ListItemIcon sx={{ minWidth: 34, color: "error.main" }}>
+              <ListItemIcon sx={{ color: "error.main" }}>
                 <LogoutRoundedIcon fontSize="small" />
               </ListItemIcon>
-              <ListItemText primary="Logout" />
+              {t("common.logout")}
             </MenuItem>
           </Menu>
         </Box>
 
-        {/* 🎯 تم إضافة مسار التنقل الذكي هنا ليعمل في كل النظام */}
         <SystemBreadcrumbs />
-
-        {/* Dynamic Page Content */}
-        <Outlet context={{ unreadCount, setUnreadCount, fetchUnreadCount }} />
+        <Outlet context={{ unreadCount, setUnreadCount }} />
       </Box>
     </Box>
   );

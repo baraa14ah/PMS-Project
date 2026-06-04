@@ -24,16 +24,16 @@ class TaskService
     private function canAccessProject($user, $project): bool
     {
         if (!$user || !$project) return false;
-        $role = $this->getRoleName($user);
 
-        if ($role === 'admin') return true;
         if ((int)$project->user_id === (int)$user->id) return true;
         if ((int)$project->supervisor_id === (int)$user->id) return true;
 
         return DB::table('project_members')
-            ->where('project_id', $project->id)
-            ->where('student_id', $user->id)
-            ->where('status', 'accepted')
+            ->join('projects', 'project_members.project_id', '=', 'projects.id')
+            ->where('projects.id', $project->id)
+            ->where('projects.university_id', $user->university_id)
+            ->where('project_members.student_id', $user->id)
+            ->where('project_members.status', 'accepted')
             ->exists();
     }
 
@@ -42,16 +42,16 @@ class TaskService
      */
     public function calculateProjectProgress($projectId)
     {
-        $total = Task::where('project_id', $projectId)->count();
+        $total = Task::query()->where('project_id', $projectId)->count();
         if ($total === 0) return 0;
 
-        $completed = Task::where('project_id', $projectId)->where('status', 'completed')->count();
+        $completed = Task::query()->where('project_id', $projectId)->where('status', 'completed')->count();
         return (int) round(($completed / $total) * 100);
     }
 
     public function getProjectTasks($projectId, $user)
     {
-        $project = Project::find($projectId);
+        $project = Project::query()->whereKey($projectId)->first();
         if (!$project) return ['status' => 404, 'message' => 'Project not found'];
 
         if (!$this->canAccessProject($user, $project)) {
@@ -59,7 +59,7 @@ class TaskService
         }
 
         // ✅ استخدمنا assignedTo بدلاً من user
-        $tasks = Task::where('project_id', $projectId)
+        $tasks = Task::query()->where('project_id', $projectId)
             ->with('assignedTo') 
             ->orderBy('created_at', 'desc')
             ->get();
@@ -69,12 +69,13 @@ class TaskService
 
     public function createTask($data, $user)
     {
-        $project = Project::find($data['project_id']);
+        $project = Project::query()->whereKey($data['project_id'])->first();
         if (!$project) return ['status' => 404, 'message' => 'Project not found'];
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
         $task = Task::create([
             'project_id'  => $project->id,
+            'university_id' => $project->university_id,
             'title'       => $data['title'],
             'description' => $data['description'] ?? null,
             'deadline'    => $data['deadline'] ?? null,
@@ -110,10 +111,10 @@ class TaskService
 
     public function updateTask($taskId, $data, $user)
     {
-        $task = Task::find($taskId);
+        $task = Task::query()->whereKey($taskId)->first();
         if (!$task) return ['status' => 404, 'message' => 'Task not found'];
 
-        $project = Project::find($task->project_id);
+        $project = Project::query()->whereKey($task->project_id)->first();
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
         $oldStatus = $task->status;
@@ -160,28 +161,27 @@ class TaskService
 
     public function deleteTask($taskId, $user)
     {
-        $task = Task::find($taskId);
+        $task = Task::query()->whereKey($taskId)->first();
         if (!$task) return ['status' => 404, 'message' => 'Task not found'];
 
         $projectId = $task->project_id;
-        $project = Project::find($projectId);
+        $project = Project::query()->whereKey($projectId)->first();
         
-        $role = $this->getRoleName($user);
-
         // 1. تحديد الصلاحيات المختلفة
-        $isAdmin = $role === 'admin';
         $isOwner = (int)$project->user_id === (int)$user->id;
         $isSupervisor = (int)$project->supervisor_id === (int)$user->id;
         
         // التحقق مما إذا كان الطالب عضواً مقبولاً في المشروع
         $isMember = \Illuminate\Support\Facades\DB::table('project_members')
-            ->where('project_id', $project->id)
-            ->where('student_id', $user->id)
-            ->where('status', 'accepted')
+            ->join('projects', 'project_members.project_id', '=', 'projects.id')
+            ->where('projects.id', $project->id)
+            ->where('projects.university_id', $user->university_id)
+            ->where('project_members.student_id', $user->id)
+            ->where('project_members.status', 'accepted')
             ->exists();
 
-        // 2. إذا لم يكن يملك أي صفة من الصفات الأربع، نمنع الحذف
-        if (!$isAdmin && !$isOwner && !$isSupervisor && !$isMember) {
+        // 2. إذا لم يكن يملك أي صفة من الصفات الثلاث، نمنع الحذف
+        if (!$isOwner && !$isSupervisor && !$isMember) {
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
@@ -207,7 +207,7 @@ class TaskService
      */
     public function getProjectStats($projectId)
     {
-        $tasks = Task::where('project_id', $projectId)->get();
+        $tasks = Task::query()->where('project_id', $projectId)->get();
         $total = $tasks->count();
         $completed = $tasks->where('status', 'completed')->count();
         

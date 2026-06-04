@@ -25,21 +25,22 @@ class ProjectVersionService
     private function canAccessProject($user, Project $project): bool
     {
         if (!$user) return false;
-        $role = $user->role?->name;
 
         $isMember = DB::table('project_members')
-            ->where('project_id', $project->id)
-            ->where('student_id', $user->id)
-            ->where('status', 'accepted')
+            ->join('projects', 'project_members.project_id', '=', 'projects.id')
+            ->where('projects.id', $project->id)
+            ->where('projects.university_id', $user->university_id)
+            ->where('project_members.student_id', $user->id)
+            ->where('project_members.status', 'accepted')
             ->exists();
 
-        return $role === 'admin' || $project->user_id === $user->id || $project->supervisor_id === $user->id || $isMember;
+        return $project->user_id === $user->id || $project->supervisor_id === $user->id || $isMember;
     }
 
     public function uploadVersion($data, $file, $user)
     {
-        $project = Project::find($data['project_id']);
-        if (!$project) return ['status' => 404, 'message' => 'Project not found'];
+        $project = Project::query()->whereKey($data['project_id'])->first();
+        if (!$project) return ['status' => 404, 'message' => 'Resource not found.'];
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
         $path = $file->store('versions', 'public');
@@ -80,11 +81,12 @@ class ProjectVersionService
 
     public function getVersions($projectId, $user)
     {
-        $project = Project::find($projectId);
-        if (!$project) return ['status' => 404, 'message' => 'Project not found'];
+        $project = Project::query()->whereKey($projectId)->first();
+        if (!$project) return ['status' => 404, 'message' => 'Resource not found.'];
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
-        $versions = ProjectVersion::where('project_id', $projectId)
+        $versions = ProjectVersion::query()->forCurrentUniversity()
+            ->where('project_id', $projectId)
             ->with('user:id,name')
             ->orderBy('created_at', 'desc')
             ->get()
@@ -103,16 +105,15 @@ class ProjectVersionService
 
     public function deleteVersion($versionId, $user)
     {
-        $version = ProjectVersion::find($versionId);
-        if (!$version) return ['status' => 404, 'message' => 'Version not found'];
+        $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
+        if (!$version) return ['status' => 404, 'message' => 'Resource not found.'];
 
-        $project = Project::find($version->project_id);
+        $project = Project::query()->whereKey($version->project_id)->first();
         
-        $isAdmin = $user->role?->name === 'admin';
         $isOwnerProject = $project->user_id === $user->id;
         $isOwnerVersion = $version->user_id === $user->id;
 
-        if (!($isAdmin || $isOwnerProject || $isOwnerVersion)) {
+        if (!($isOwnerProject || $isOwnerVersion)) {
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
@@ -134,11 +135,12 @@ class ProjectVersionService
 
     public function getTimeline($projectId, $user)
     {
-        $project = Project::find($projectId);
-        if (!$project) return ['status' => 404, 'message' => 'Project not found'];
+        $project = Project::query()->whereKey($projectId)->first();
+        if (!$project) return ['status' => 404, 'message' => 'Resource not found.'];
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
-        $versions = ProjectVersion::where('project_id', $projectId)->with('user:id,name')->orderBy('created_at', 'desc')->get();
+        $versions = ProjectVersion::query()->forCurrentUniversity()
+            ->where('project_id', $projectId)->with('user:id,name')->orderBy('created_at', 'desc')->get();
 
         $timeline = $versions->groupBy(fn ($v) => Carbon::parse($v->created_at)->format('F Y'))->map(function ($items, $month) {
             return [
@@ -156,10 +158,10 @@ class ProjectVersionService
 
     public function pushToGithub($versionId, $user)
     {
-        $version = ProjectVersion::find($versionId);
-        if (!$version) return ['status' => 404, 'message' => 'Version not found'];
+        $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
+        if (!$version) return ['status' => 404, 'message' => 'Resource not found.'];
 
-        $project = Project::find($version->project_id);
+        $project = Project::query()->whereKey($version->project_id)->first();
         if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
 
         return $this->githubService->pushVersionToGithub(
@@ -184,7 +186,7 @@ class ProjectVersionService
 
         $members = \Illuminate\Support\Facades\DB::table('project_members')
             ->where('project_id', $project->id)
-            ->where('status', 'accepted')
+            ->where('project_members.status', 'accepted')
             ->pluck('student_id')
             ->toArray();
         

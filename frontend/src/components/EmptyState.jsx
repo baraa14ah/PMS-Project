@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Typography, Button, alpha } from "@mui/material";
+import { useLanguage } from "../context/LanguageContext";
 
 export default function EmptyState({
   icon,
@@ -8,6 +9,8 @@ export default function EmptyState({
   actionText,
   onAction,
 }) {
+  const { dir } = useLanguage();
+
   return (
     <Box
       sx={{
@@ -19,7 +22,7 @@ export default function EmptyState({
         px: 2,
         textAlign: "center",
       }}
-      dir="rtl"
+      dir={dir}
     >
       <Box
         sx={{

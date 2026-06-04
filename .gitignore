@@ -1,0 +1,55 @@
+# ByteHub PMS — Git يتتبع فقط ما يلزم لتشغيل المشروع
+# المجلدان: backend last + frontend (+ هذا الملف)
+
+# ─── تجاهل كل شيء في الجذر، ثم استثناء مجلدي التشغيل ───
+/*
+!/.gitignore
+!/frontend/
+!/frontend/**
+!/backend last/
+!/backend last/**
+
+# ─── Laravel — لا تُرفع (تُبنى محلياً) ───
+/backend last/vendor/
+/backend last/node_modules/
+/backend last/public/build/
+/backend last/public/hot
+/backend last/public/storage
+/backend last/storage/*.key
+/backend last/storage/logs/
+/backend last/storage/framework/cache/data/*
+/backend last/storage/framework/sessions/*
+/backend last/storage/framework/views/*
+!/backend last/storage/framework/cache/.gitignore
+!/backend last/storage/framework/cache/data/.gitignore
+!/backend last/storage/framework/sessions/.gitignore
+!/backend last/storage/framework/views/.gitignore
+!/backend last/storage/logs/.gitignore
+
+/backend last/.env
+/backend last/.env.*
+!/backend last/.env.example
+
+/backend last/.phpunit.cache
+/backend last/.phpunit.result.cache
+/backend last/auth.json
+/backend last/npm-debug.log*
+/backend last/yarn-error.log*
+/backend last/pnpm-debug.log*
+
+# ─── React — لا تُرفع (تُبنى محلياً) ───
+/frontend/node_modules/
+/frontend/dist/
+/frontend/build/
+/frontend/.env
+/frontend/.env.*
+!/frontend/.env.example
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/pnpm-debug.log*
+
+# composer.lock و package-lock.json — تُرفَع مع الكود
+
+# ─── يُتجاهل تلقائياً (خارج المجلدين أعلاه) ───
+# specs/  .cursor/  .specify/  PLAN.md  وغيرها — لا تدخل Git

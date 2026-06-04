@@ -13,7 +13,8 @@ class CommentRepository
 
     public function getProjectComments(int $projectId)
     {
-        return Comment::where('project_id', $projectId)
+        return Comment::query()->forCurrentUniversity()
+            ->where('project_id', $projectId)
             ->with('user')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -21,7 +22,8 @@ class CommentRepository
 
     public function getTaskComments(int $taskId)
     {
-        return Comment::where('task_id', $taskId)
+        return Comment::query()->forCurrentUniversity()
+            ->where('task_id', $taskId)
             ->with('user')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -29,7 +31,7 @@ class CommentRepository
 
     public function find(int $id): ?Comment
     {
-        return Comment::find($id);
+        return Comment::query()->forCurrentUniversity()->whereKey($id)->first();
     }
 
     public function update(Comment $comment, array $data): Comment

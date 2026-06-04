@@ -37,17 +37,20 @@ class StudentInvitationController extends Controller
 
     public function reject(Request $request, $inviteId)
     {
-        $inv = StudentInvitation::where('id', $inviteId)->where('student_id', $request->user()->id)->first();
-        if (!$inv) return response()->json(['message' => 'Not found'], 404);
+        $inv = StudentInvitation::query()->forCurrentUniversity()
+            ->where('id', $inviteId)->where('student_id', $request->user()->id)->first();
+        if (!$inv) return response()->json(['message' => 'Resource not found.'], 404);
         $inv->update(['status' => 'rejected']);
         return response()->json(['message' => 'Rejected']);
     }
 public function studentsList(Request $request)
     {
         // جلب كل المستخدمين وفلترتهم برمجياً لتجنب أي خطأ 500
-        $students = \App\Models\User::get()
+        $students = \App\Models\User::query()
+            ->with('role')
+            ->inUniversity($request->user()->university_id)
+            ->get()
             ->filter(function ($user) {
-                // فحص الصلاحية بأمان تام
                 $roleName = is_string($user->role) ? strtolower($user->role) : strtolower($user->role?->name ?? '');
                 return $roleName === 'student';
             })
@@ -56,6 +59,7 @@ public function studentsList(Request $request)
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'university_id' => $user->university_id,
                 ];
             })
             ->values();

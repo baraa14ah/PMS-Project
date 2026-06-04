@@ -16,7 +16,7 @@ class TaskController extends Controller
     public function getProjectTasks(Request $request, $projectId)
     {
         $result = $this->taskService->getProjectTasks($projectId, $request->user());
-        if ($result['status'] !== 200) return response()->json(['message' => $result['message']], $result['status']);
+        if ($result['status'] !== 200) return response()->json(['message' => 'Resource not found.'], 404);
 
         return response()->json([
             'tasks' => $result['tasks'],
@@ -53,7 +53,7 @@ class TaskController extends Controller
         ]);
 
         $result = $this->taskService->updateTask($id, $validatedData, $request->user());
-        if ($result['status'] !== 200) return response()->json(['message' => $result['message']], $result['status']);
+        if ($result['status'] !== 200) return response()->json(['message' => 'Resource not found.'], 404);
 
         return response()->json([
             'message' => 'Task updated successfully',
@@ -65,7 +65,7 @@ class TaskController extends Controller
     public function delete(Request $request, $id)
     {
         $result = $this->taskService->deleteTask($id, $request->user());
-        if ($result['status'] !== 200) return response()->json(['message' => $result['message']], $result['status']);
+        if ($result['status'] !== 200) return response()->json(['message' => 'Resource not found.'], 404);
 
         return response()->json([
             'message' => $result['message'],

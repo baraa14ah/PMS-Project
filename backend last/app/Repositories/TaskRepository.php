@@ -15,13 +15,13 @@ class TaskRepository
     // جلب جميع المهام لمشروع معيّن
     public function getByProjectId($projectId)
     {
-        return Task::where('project_id', $projectId)->get();
+        return Task::query()->where('project_id', $projectId)->get();
     }
 
     // جلب مهمة واحدة حسب ID
     public function find($id)
     {
-        return Task::find($id);
+        return Task::query()->find($id);
     }
 
     // تحديث مهمة

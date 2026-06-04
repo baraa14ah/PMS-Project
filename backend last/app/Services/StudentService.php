@@ -8,41 +8,64 @@ use Illuminate\Support\Facades\DB;
 
 class StudentService
 {
-    /**
-     * جلب أعضاء المشروع (المالك + الأعضاء المقبولين)
-     */
     public function getProjectMembers($projectId)
     {
-        $project = Project::with(['user:id,name,email'])->find($projectId);
-        if (!$project) return null;
+        $project = Project::query()->with(['user:id,name,email'])->whereKey($projectId)->first();
+        if (!$project) {
+            return null;
+        }
 
-        // جلب الأعضاء الذين قبلوا الدعوة فقط
-        $members = User::whereHas('projectsAsMember', function ($query) use ($projectId) {
-            $query->where('project_id', $projectId)
-                  ->where('project_members.status', 'accepted');
-        })->select('id', 'name', 'email')->get();
+        $memberIds = DB::table('project_members')
+            ->where('project_id', $projectId)
+            ->where('status', 'accepted')
+            ->pluck('student_id');
+
+        $members = User::query()
+            ->whereIn('id', $memberIds)
+            ->select('id', 'name', 'email', 'university_id')
+            ->get();
 
         return [
             'owner' => $project->user,
-            'members' => $members
+            'members' => $members,
         ];
     }
 
     /**
-     * جلب قائمة الطلاب المتاحين للدعوة (غير الموجودين في المشروع حالياً)
+     * طلاب نفس جامعة المشروع — غير المالك وغير الأعضاء الحاليين في project_members.
      */
     public function getAvailableStudents($projectId, $search = null)
     {
-        $query = User::where('role_id', 2) // دور الطالب
-            ->whereDoesntHave('projectsAsMember', function ($q) use ($projectId) {
-                $q->where('project_id', $projectId);
-            })
-            ->where('id', '!=', Project::find($projectId)->user_id); // استبعاد المالك
-
-        if ($search) {
-            $query->where('name', 'like', "%{$search}%");
+        $project = Project::query()->whereKey($projectId)->first();
+        if (!$project || !$project->university_id) {
+            return collect();
         }
 
-        return $query->select('id', 'name', 'email')->get();
+        $memberIds = DB::table('project_members')
+            ->where('project_id', $projectId)
+            ->pluck('student_id')
+            ->all();
+
+        $excludeIds = array_unique(array_filter(array_merge($memberIds, [$project->user_id])));
+
+        $query = User::query()
+            ->where('status', 'active')
+            ->whereHas('role', fn ($q) => $q->where('name', 'student'))
+            ->inUniversity((int) $project->university_id)
+            ->when(!empty($excludeIds), fn ($q) => $q->whereNotIn('id', $excludeIds));
+
+        if ($search) {
+            $term = '%' . trim($search) . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('name', 'like', $term)
+                    ->orWhere('email', 'like', $term)
+                    ->orWhere('student_number', 'like', $term);
+            });
+        }
+
+        return $query
+            ->select('id', 'name', 'email', 'student_number', 'university_id')
+            ->orderBy('name')
+            ->get();
     }
 }

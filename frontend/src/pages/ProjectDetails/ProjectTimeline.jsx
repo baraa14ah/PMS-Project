@@ -25,7 +25,8 @@ import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
 import PlayCircleRoundedIcon from "@mui/icons-material/PlayCircleRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
+import { useAuth } from "../../context/AuthContext";
+import { useLanguage } from "../../context/LanguageContext";
 
 // 🎯 دالة سحرية لتعيين الأيقونة واللون حسب نوع الحركة
 const getActivityConfig = (type) => {
@@ -75,7 +76,10 @@ const formatTime = (dateString) => {
   });
 };
 
-export default function ProjectTimeline({ projectId, authHeaders }) {
+export default function ProjectTimeline({ projectId }) {
+  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { dir, isRtl } = useLanguage();
+  const textAlign = isRtl ? "right" : "left";
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -84,15 +88,12 @@ export default function ProjectTimeline({ projectId, authHeaders }) {
     const fetchActivities = async () => {
       try {
         setLoading(true);
-        const res = await fetch(
+        const { res, data } = await apiFetch(
           `${API_BASE_URL}/project/${projectId}/activities`,
-          {
-            headers: authHeaders,
-          },
+          { headers: authHeaders() },
         );
-        const data = await res.json();
 
-        if (res.ok && data.status === "success") {
+        if (res.ok && data?.status === "success") {
           setActivities(data.activities || []);
         } else {
           throw new Error("حدث خطأ أثناء جلب النشاطات");
@@ -196,23 +197,23 @@ export default function ProjectTimeline({ projectId, authHeaders }) {
                     </Avatar>
                     <Box>
                       <Typography
-                        dir="rtl" // 🎯 إجبار الاتجاه
+                        dir={dir}
                         sx={{
                           fontWeight: 800,
                           fontSize: "0.95rem",
                           unicodeBidi: "isolate",
-                          textAlign: "right",
+                          textAlign,
                         }}
                       >
                         {activity.action}
                       </Typography>
                       <Typography
-                        dir="rtl"
+                        dir={dir}
                         variant="caption"
                         sx={{
                           color: "text.secondary",
                           unicodeBidi: "isolate",
-                          textAlign: "right",
+                          textAlign,
                           fontWeight: 600,
                         }}
                       >

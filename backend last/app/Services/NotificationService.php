@@ -53,13 +53,15 @@ class NotificationService
 
     public function notifyProjectParticipants(int $projectId, int $actorUserId, string $type, string $title, ?string $body = null, array $data = []): void
     {
-        $project = Project::find($projectId);
+        $project = Project::query()->whereKey($projectId)->first();
         if (!$project) return;
 
         $ids = DB::table('project_members')
-            ->where('project_id', $projectId)
-            ->where('status', 'accepted')
-            ->pluck('student_id')
+            ->join('projects', 'project_members.project_id', '=', 'projects.id')
+            ->where('projects.id', $projectId)
+            ->where('projects.university_id', auth()->user()->university_id ?? $project->university_id)
+            ->where('project_members.status', 'accepted')
+            ->pluck('project_members.student_id')
             ->toArray();
 
         $ids[] = $project->user_id;
@@ -69,7 +71,7 @@ class NotificationService
 
         if (empty($targetIds)) return;
 
-        $users = User::whereIn('id', $targetIds)->get();
+        $users = User::query()->whereIn('id', $targetIds)->get();
         foreach ($users as $u) {
             $this->notifyUser($u, $type, $title, $body, $data);
         }

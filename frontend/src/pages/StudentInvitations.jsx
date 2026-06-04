@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 
 import {
@@ -27,19 +27,9 @@ import HighlightOffRoundedIcon from "@mui/icons-material/HighlightOffRounded";
 import GroupAddRoundedIcon from "@mui/icons-material/GroupAddRounded";
 import toast from "react-hot-toast";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-
 export default function StudentInvitations() {
-  const { token, user } = useAuth();
+  const { token, user, authHeaders, apiFetch, API_BASE_URL } = useAuth();
   const roleName = (user?.role || "").toLowerCase();
-
-  const authHeaders = useMemo(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    }),
-    [token],
-  );
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,11 +41,10 @@ export default function StudentInvitations() {
       setLoading(true);
       setError("");
 
-      const res = await fetch(`${API_BASE_URL}/student/invitations`, {
-        headers: authHeaders,
-      });
-
-      const data = await res.json().catch(() => null);
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/student/invitations`,
+        { headers: authHeaders() },
+      );
       if (!res.ok) {
         setError(data?.message || "تعذر جلب دعوات الانضمام");
         setItems([]);
@@ -79,12 +68,10 @@ export default function StudentInvitations() {
   const acceptInvite = async (inviteId) => {
     try {
       setBusyId(inviteId);
-      const res = await fetch(
+      const { res, data } = await apiFetch(
         `${API_BASE_URL}/student/invitations/${inviteId}/accept`,
-        { method: "POST", headers: authHeaders },
+        { method: "POST", headers: authHeaders() },
       );
-
-      const data = await res.json().catch(() => null);
       if (!res.ok) return toast.error(data?.message || "تعذر قبول الدعوة");
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));
@@ -103,12 +90,10 @@ export default function StudentInvitations() {
   const rejectInvite = async (inviteId) => {
     try {
       setBusyId(inviteId);
-      const res = await fetch(
+      const { res, data } = await apiFetch(
         `${API_BASE_URL}/student/invitations/${inviteId}/reject`,
-        { method: "POST", headers: authHeaders },
+        { method: "POST", headers: authHeaders() },
       );
-
-      const data = await res.json().catch(() => null);
       if (!res.ok) return toast.error(data?.message || "تعذر رفض الدعوة");
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));

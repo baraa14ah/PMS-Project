@@ -22,7 +22,8 @@ class CommentService
      */
     public function getProjectComments($projectId)
     {
-        return Comment::where('project_id', $projectId)
+        return Comment::query()->forCurrentUniversity()
+            ->where('project_id', $projectId)
             ->with('user:id,name')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -33,7 +34,8 @@ class CommentService
      */
     public function getTaskComments($taskId)
     {
-        return Comment::where('task_id', $taskId)
+        return Comment::query()->forCurrentUniversity()
+            ->where('task_id', $taskId)
             ->with('user:id,name')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -44,7 +46,7 @@ class CommentService
      */
     public function addProjectComment($projectId, $commentText, $user)
     {
-        $project = Project::find($projectId);
+        $project = Project::query()->whereKey($projectId)->first();
         if (!$project) return null;
 
         $comment = Comment::create([
@@ -75,7 +77,7 @@ class CommentService
      */
     public function addTaskComment($taskId, $commentText, $user)
     {
-        $task = Task::find($taskId);
+        $task = Task::query()->whereKey($taskId)->first();
         if (!$task) return null;
 
         $comment = Comment::create([
@@ -86,7 +88,7 @@ class CommentService
 
         $projectId = (int)($task->project_id ?? 0);
         if ($projectId) {
-            $project = Project::find($projectId);
+            $project = Project::query()->whereKey($projectId)->first();
             $this->notifications->notifyProject(
                 project: $project,
                 type: 'comment_added',
@@ -110,10 +112,10 @@ class CommentService
      */
     public function updateComment($id, $commentText, $user)
     {
-        $comment = Comment::find($id);
+        $comment = Comment::query()->forCurrentUniversity()->whereKey($id)->first();
         if (!$comment) return ['status' => 404, 'message' => 'Comment not found'];
 
-        if ($user->role?->name !== 'admin' && (int)$comment->user_id !== (int)$user->id) {
+        if ((int)$comment->user_id !== (int)$user->id) {
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
@@ -126,10 +128,10 @@ class CommentService
      */
     public function deleteComment($id, $user)
     {
-        $comment = Comment::find($id);
+        $comment = Comment::query()->forCurrentUniversity()->whereKey($id)->first();
         if (!$comment) return ['status' => 404, 'message' => 'Comment not found'];
 
-        if ($user->role?->name !== 'admin' && (int)$comment->user_id !== (int)$user->id) {
+        if ((int)$comment->user_id !== (int)$user->id) {
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 

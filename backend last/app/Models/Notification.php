@@ -30,4 +30,15 @@ class Notification extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function scopeForCurrentUniversity($query)
+    {
+        if (!auth()->check() || !auth()->user()->university_id) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereHas('user', function ($q) {
+            $q->where('university_id', auth()->user()->university_id);
+        });
+    }
 }

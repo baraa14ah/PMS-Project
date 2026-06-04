@@ -20,4 +20,15 @@ class Rating extends Model
     {
         return $this->belongsTo(Project::class);
     }
+
+    public function scopeForCurrentUniversity($query)
+    {
+        if (!auth()->check() || !auth()->user()->university_id) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereHas('project', function ($q) {
+            $q->where('university_id', auth()->user()->university_id);
+        });
+    }
 }

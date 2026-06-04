@@ -1,89 +1,135 @@
 import { createTheme } from "@mui/material/styles";
 
-// حولناها إلى دالة تستقبل (mode) لتقرر الألوان
-export const getDesignTokens = (mode) => ({
-  // 🎯 إضافة اتجاه النص الافتراضي ليكون مدعوماً في الثيم
-  direction: "rtl",
+const NAVY = "#0B1220";
+const BLUE = "#3B82F6";
+const TEAL = "#14B8A6";
 
+export const brandColors = { navy: NAVY, blue: BLUE, teal: TEAL, bg: "#F7F8FA", border: "#E2E8F0" };
+
+export const getDesignTokens = (mode, direction = "rtl", lang = "ar") => ({
+  direction,
   palette: {
     mode,
     ...(mode === "light"
       ? {
-          // ألوانك الأصلية (الوضع الفاتح)
-          primary: { main: "#111827" },
-          secondary: { main: "#2563EB" },
+          primary: { main: NAVY, contrastText: "#fff" },
+          secondary: { main: BLUE },
+          success: { main: TEAL },
           background: { default: "#F7F8FA", paper: "#FFFFFF" },
-          text: { primary: "#111827", secondary: "#6B7280" },
-          divider: "#E6E8EC",
+          text: { primary: NAVY, secondary: "#64748B" },
+          divider: "#E2E8F0",
         }
       : {
-          // الألوان الجديدة (الوضع الداكن الأنيق)
-          primary: { main: "#F9FAFB" }, // أبيض للوضع الداكن
-          secondary: { main: "#3B82F6" }, // أزرق فاقع قليلاً
-          background: { default: "#111827", paper: "#1F2937" }, // خلفيات داكنة
-          text: { primary: "#F9FAFB", secondary: "#9CA3AF" }, // نصوص فاتحة
-          divider: "#374151",
+          primary: { main: "#F1F5F9", contrastText: NAVY },
+          secondary: { main: "#60A5FA" },
+          success: { main: "#2DD4BF" },
+          background: { default: NAVY, paper: "#1E293B" },
+          text: { primary: "#F1F5F9", secondary: "#94A3B8" },
+          divider: "#334155",
         }),
   },
-  // تخصيصاتك الأصلية تبقى كما هي للوضعين!
-  shape: { borderRadius: 14 },
+  shape: { borderRadius: 12 },
   typography: {
-    fontFamily: [
-      "Inter",
-      "system-ui",
-      "-apple-system",
-      "Segoe UI",
-      "Roboto",
-      "Arial",
-      "sans-serif",
-      "Cairo",
-    ].join(","),
-    h3: { fontWeight: 900, letterSpacing: -0.8 },
-    h4: { fontWeight: 900, letterSpacing: -0.4 },
-    h5: { fontWeight: 900 },
-    button: { fontWeight: 900, textTransform: "none" },
+    fontFamily:
+      lang === "en"
+        ? [
+            "Inter",
+            "system-ui",
+            "-apple-system",
+            "Segoe UI",
+            "Roboto",
+            "Cairo",
+            "Arial",
+            "sans-serif",
+          ].join(",")
+        : [
+            "Cairo",
+            "Inter",
+            "system-ui",
+            "-apple-system",
+            "Segoe UI",
+            "Roboto",
+            "Arial",
+            "sans-serif",
+          ].join(","),
+    h3: { fontWeight: 900, letterSpacing: -0.5 },
+    h4: { fontWeight: 900, letterSpacing: -0.3 },
+    h5: { fontWeight: 800 },
+    button: { fontWeight: 800, textTransform: "none" },
   },
   components: {
     MuiCssBaseline: {
       styleOverrides: {
-        // تغيير لون الخلفية الأساسية حسب الوضع
         body: {
-          backgroundColor: mode === "light" ? "#F7F8FA" : "#111827",
-          unicodeBidi: "isolate", // 🎯 حماية كل نصوص الموقع (div, span, p)
-        },
-      },
-    },
-    MuiTypography: {
-      styleOverrides: {
-        root: {
-          unicodeBidi: "isolate", // 🎯 حماية مكونات النصوص الخاصة بـ MUI
+          backgroundColor: mode === "light" ? "#F7F8FA" : NAVY,
         },
       },
     },
     MuiPaper: {
       styleOverrides: {
         root: {
-          border: `1px solid ${mode === "light" ? "#E6E8EC" : "#374151"}`,
-          backgroundImage: "none", // لمنع التأثير الرمادي المزعج في الوضع الداكن
+          backgroundImage: "none",
+          border: `1px solid ${mode === "light" ? "#E2E8F0" : "#334155"}`,
         },
       },
     },
     MuiButton: {
       styleOverrides: {
-        root: {
-          borderRadius: 12,
-          unicodeBidi: "isolate", // 🎯 حماية النصوص داخل الأزرار
+        root: { borderRadius: 10 },
+        contained: {
+          color: "#FFFFFF !important",
+          "& .MuiButton-startIcon, & .MuiButton-endIcon": {
+            color: "#FFFFFF !important",
+          },
         },
         containedPrimary: {
-          boxShadow:
-            mode === "light"
-              ? "0 12px 30px rgba(0,0,0,0.14)"
-              : "0 8px 20px rgba(0,0,0,0.5)",
+          color: "#FFFFFF !important",
+          background: `linear-gradient(135deg, ${NAVY} 0%, #1E293B 100%)`,
+          boxShadow: mode === "light" ? "0 8px 24px rgba(11,18,32,0.2)" : "none",
+          "&:hover": {
+            color: "#FFFFFF !important",
+            background: `linear-gradient(135deg, #1E293B 0%, #334155 100%)`,
+          },
+          "&.Mui-disabled": {
+            color: "rgba(255,255,255,0.45) !important",
+          },
+        },
+        containedSuccess: {
+          color: "#FFFFFF !important",
+          "&:hover": { color: "#FFFFFF !important" },
+        },
+        containedSecondary: {
+          color: "#FFFFFF !important",
+          "&:hover": { color: "#FFFFFF !important" },
         },
       },
     },
-    MuiTextField: {
-      defaultProps: { size: "medium" },
+    MuiTypography: {
+      styleOverrides: {
+        root: {
+          "&.MuiTypography-root": {},
+        },
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          borderInlineEnd: `1px solid ${mode === "light" ? "#E2E8F0" : "#334155"}`,
+        },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 10,
+          "&.Mui-selected": {
+            backgroundColor: mode === "light" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.2)",
+            "&:hover": {
+              backgroundColor: mode === "light" ? "rgba(59, 130, 246, 0.16)" : "rgba(59, 130, 246, 0.25)",
+            },
+          },
+        },
+      },
     },
   },
 });

@@ -23,21 +23,27 @@ class ProjectVersionController extends Controller
         $user = $request->user();
         if (!$user) return false;
         
-        return $user->role?->name === 'admin'
-            || $project->user_id === $user->id
+        return $project->user_id === $user->id
             || $project->supervisor_id === $user->id
-            || DB::table('project_members')->where('project_id', $project->id)->where('student_id', $user->id)->where('status', 'accepted')->exists();
+            || DB::table('project_members')
+                ->join('projects', 'project_members.project_id', '=', 'projects.id')
+                ->where('projects.id', $project->id)
+                ->where('projects.university_id', $user->university_id)
+                ->where('project_members.student_id', $user->id)
+                ->where('project_members.status', 'accepted')
+                ->exists();
     }
 
     // 1. عرض الإصدارات
     public function index(Request $request, $projectId)
     {
-        $project = Project::find($projectId);
-        if (!$project) return response()->json(['message' => 'Project not found'], 404);
+        $project = Project::query()->whereKey($projectId)->first();
+        if (!$project) return response()->json(['message' => 'Resource not found.'], 404);
 
         if (!$this->canAccessProject($request, $project)) return response()->json(['message' => 'Unauthorized'], 403);
 
-        $versions = ProjectVersion::where('project_id', $projectId)
+        $versions = ProjectVersion::query()->forCurrentUniversity()
+            ->where('project_id', $projectId)
             ->with('user:id,name')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -80,10 +86,10 @@ class ProjectVersionController extends Controller
     // 3. ✅ دالة التعديل (update)
     public function update(Request $request, $versionId)
     {
-        $version = ProjectVersion::find($versionId);
-        if (!$version) return response()->json(['message' => 'Version not found'], 404);
+        $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
+        if (!$version) return response()->json(['message' => 'Resource not found.'], 404);
 
-        $project = Project::find($version->project_id);
+        $project = Project::query()->whereKey($version->project_id)->first();
         if (!$this->canAccessProject($request, $project)) return response()->json(['message' => 'Unauthorized'], 403);
 
         $request->validate([

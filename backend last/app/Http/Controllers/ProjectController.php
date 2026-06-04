@@ -23,31 +23,9 @@ class ProjectController extends Controller
   public function index(Request $request)
   {
       $user = $request->user();
-      
-      // جلب اسم الصلاحية بطريقة ذكية (سواء كانت علاقة بجدول آخر، أو مجرد نص في جدول المستخدمين)
-      $roleName = is_string($user->role) ? strtolower($user->role) : strtolower($user->role?->name ?? '');
+      $user->loadMissing('role');
 
-      // 1. إذا كان أدمن (يرى كل المشاريع)
-      if ($roleName === 'admin') {
-          $projects = \App\Models\Project::with(['user', 'supervisor'])->orderBy('created_at', 'desc')->get();
-      } 
-      // 2. إذا كان مشرف (يرى المشاريع التي تحمل الـ ID الخاص به فقط)
-      elseif ($roleName === 'supervisor') {
-          $projects = \App\Models\Project::with(['user', 'supervisor'])
-              ->where('supervisor_id', $user->id)
-              ->orderBy('created_at', 'desc')
-              ->get();
-      } 
-      // 3. إذا كان طالب (يرى مشاريعه الخاصة أو التي هو عضو فيها)
-      else {
-          $projects = \App\Models\Project::with(['user', 'supervisor'])
-              ->where('user_id', $user->id)
-              ->orWhereHas('members', function($q) use ($user) {
-                  $q->where('student_id', $user->id)->where('status', 'accepted');
-              })
-              ->orderBy('created_at', 'desc')
-              ->get();
-      }
+      $projects = $this->projectService->listForIndex($user);
 
       return response()->json(['projects' => $projects]);
   }
@@ -123,13 +101,12 @@ class ProjectController extends Controller
     // دالة إلغاء الإشراف على المشروع
     public function leaveSupervision(Request $request, $id)
     {
-        $project = \App\Models\Project::findOrFail($id);
+        $project = \App\Models\Project::query()->whereKey($id)->firstOrFail();
 
-        // التأكد من أن من يطلب الإلغاء هو مشرف المشروع نفسه (أو أدمن)
+        // التأكد من أن من يطلب الإلغاء هو مشرف المشروع نفسه
         $user = $request->user();
-        $roleName = is_string($user->role) ? strtolower($user->role) : strtolower($user->role?->name ?? '');
 
-        if ($project->supervisor_id !== $user->id && $roleName !== 'admin') {
+        if ($project->supervisor_id !== $user->id) {
             return response()->json(['message' => 'غير مصرح لك بإلغاء الإشراف'], 403);
         }
 
@@ -156,20 +133,30 @@ class ProjectController extends Controller
     public function students(Request $request, int $id)
     {
         // استدعاء السيرفيس للقيام بالعمل الشاق
-        $students = $this->projectService->getAvailableStudentsForInvite($id);
-        
+        $students = $this->projectService->getAvailableStudentsForInvite(
+            $id,
+            $request->get('search'),
+        );
+
         return response()->json(['students' => $students]);
     }
     public function getActivities($id)
-{
-    $activities = \App\Models\ProjectActivity::with('user:id,name') // جلب اسم المستخدم فقط
-        ->where('project_id', $id)
-        ->orderBy('created_at', 'desc')
-        ->get();
+    {
+        $project = \App\Models\Project::query()->whereKey($id)->first();
+        if (!$project) {
+            return response()->json(['message' => 'Project not found'], 404);
+        }
 
-    return response()->json([
-        'status' => 'success',
-        'activities' => $activities
-    ]);
-}
+        $activities = \App\Models\ProjectActivity::query()
+            ->forCurrentUniversity()
+            ->with('user:id,name')
+            ->where('project_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'activities' => $activities,
+        ]);
+    }
 }

@@ -13,6 +13,7 @@ import {
   useTheme, // 🎯 أضفنا استدعاء الثيم لمعرفة الوضع الحالي
 } from "@mui/material";
 import toast from "react-hot-toast";
+import { useAuth } from "../../context/AuthContext";
 
 // Icons
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
@@ -20,18 +21,16 @@ import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-
 export default function TasksTab({
   projectId,
   tasks,
   setTasks,
-  authHeaders,
   updateProgressLocally,
   setDialogConfig,
   setDialogLoading,
   closeDialog,
 }) {
+  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark"; // 🎯 متغير سحري يخبرنا إذا كنا في الوضع الليلي
 
@@ -74,9 +73,9 @@ export default function TasksTab({
 
     try {
       setCreatingTask(true);
-      const res = await fetch(`${API_BASE_URL}/task/create`, {
+      const { res, data } = await apiFetch(`${API_BASE_URL}/task/create`, {
         method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           project_id: projectId,
           title: newTask.title,
@@ -84,7 +83,6 @@ export default function TasksTab({
           deadline: newTask.deadline || null,
         }),
       });
-      const data = await res.json().catch(() => null);
       if (!res.ok)
         return setTaskMsg({
           type: "error",
@@ -121,9 +119,9 @@ export default function TasksTab({
 
     try {
       setSavingTask(true);
-      const res = await fetch(`${API_BASE_URL}/task/update/${taskId}`, {
+      const { res } = await apiFetch(`${API_BASE_URL}/task/update/${taskId}`, {
         method: "PUT",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           title: editTaskData.title,
           description: editTaskData.description || null,
@@ -156,9 +154,9 @@ export default function TasksTab({
       onConfirm: async () => {
         try {
           setDialogLoading(true);
-          const res = await fetch(`${API_BASE_URL}/task/delete/${taskId}`, {
+          const { res } = await apiFetch(`${API_BASE_URL}/task/delete/${taskId}`, {
             method: "DELETE",
-            headers: authHeaders,
+            headers: authHeaders(),
           });
 
           if (!res.ok) {
@@ -203,9 +201,9 @@ export default function TasksTab({
     updateProgressLocally(updated);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/task/update/${taskId}`, {
+      const { res } = await apiFetch(`${API_BASE_URL}/task/update/${taskId}`, {
         method: "PUT",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error();
