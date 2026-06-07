@@ -7,10 +7,7 @@ import GroupRoundedIcon from "@mui/icons-material/GroupRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 
-/**
- * عناصر السايدبار حسب الدور — لا يُعرض ما لا يستخدمه الدور.
- * roles: student | supervisor | admin | super_admin
- */
+/** Sidebar items visible per role (student, supervisor, admin, super_admin). */
 export const NAV_ITEMS = [
   {
     id: "home",
@@ -59,7 +56,7 @@ export const NAV_ITEMS = [
     to: "/dashboard/users",
     icon: GroupRoundedIcon,
     roles: ["admin", "super_admin"],
-    badgeKey: "passwordReset",
+    badgeKey: "usersAlerts",
   },
   {
     id: "universities",
@@ -74,10 +71,25 @@ export const NAV_ITEMS = [
     to: "/dashboard/profile",
     icon: AccountCircleRoundedIcon,
     roles: ["student", "supervisor", "admin"],
+    order: 99,
   },
 ];
 
+const DEFAULT_ORDER = {
+  home: 0,
+  projects: 1,
+  notifications: 2,
+  supervisor_invitations: 3,
+  student_invitations: 3,
+  users: 4,
+  universities: 5,
+  profile: 99,
+};
+
+/** Returns sorted sidebar items allowed for the given role. */
 export function getNavForRole(roleName) {
   const role = String(roleName || "").toLowerCase();
-  return NAV_ITEMS.filter((item) => item.roles.includes(role));
+  return NAV_ITEMS.filter((item) => item.roles.includes(role)).sort(
+    (a, b) => (a.order ?? DEFAULT_ORDER[a.id] ?? 50) - (b.order ?? DEFAULT_ORDER[b.id] ?? 50),
+  );
 }

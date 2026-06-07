@@ -26,21 +26,25 @@ class PasswordResetRequest extends Model
         'handled_at' => 'datetime',
     ];
 
+    /** Returns the user who submitted this reset request. */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** Returns the university associated with this request. */
     public function university(): BelongsTo
     {
         return $this->belongsTo(University::class);
     }
 
+    /** Returns the admin who handled this request. */
     public function handler(): BelongsTo
     {
         return $this->belongsTo(User::class, 'handled_by');
     }
 
+    /** Scopes requests to the given or authenticated admin's university. */
     public function scopeForAdminUniversity($query, ?int $universityId = null)
     {
         $universityId = $universityId ?? auth()->user()?->university_id;

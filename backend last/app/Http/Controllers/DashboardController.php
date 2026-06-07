@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\StudentInvitation;
 use App\Models\SupervisorInvitation;
 use App\Models\Task;
+use App\Models\User;
 use App\Services\InvitationService;
 use App\Services\PasswordResetHelpService;
 use App\Services\ProjectService;
@@ -12,12 +13,14 @@ use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    /** Initialize dashboard dependencies. */
     public function __construct(
         protected ProjectService $projectService,
         protected InvitationService $invitationService,
         protected PasswordResetHelpService $passwordResetHelp,
     ) {}
 
+    /** Return dashboard summary stats and recent activity. */
     public function summary(Request $request)
     {
         $user = $request->user();
@@ -63,6 +66,7 @@ class DashboardController extends Controller
         ]);
     }
 
+    /** Return badge counts for sidebar notifications. */
     public function badges(Request $request)
     {
         $user = $request->user();
@@ -70,10 +74,11 @@ class DashboardController extends Controller
         $roleName = strtolower($user->role?->name ?? '');
 
         $passwordResetRequests = 0;
+        $pendingUsers = 0;
         if ($roleName === 'admin' && $user->university_id) {
-            $passwordResetRequests = $this->passwordResetHelp->pendingCountForUniversity(
-                (int) $user->university_id,
-            );
+            $uniId = (int) $user->university_id;
+            $passwordResetRequests = $this->passwordResetHelp->pendingCountForUniversity($uniId);
+            $pendingUsers = User::pendingApprovalCountForUniversity($uniId);
         }
 
         return response()->json([
@@ -81,15 +86,18 @@ class DashboardController extends Controller
             'student_invitations'  => $this->studentInvitesCount($user, $roleName),
             'supervisor_invitations' => $this->supervisorInvitesCount($user, $roleName),
             'password_reset_requests' => $passwordResetRequests,
+            'pending_users' => $pendingUsers,
         ]);
     }
 
+    /** Count total pending student and supervisor invitations. */
     private function pendingInvitesCount($user, string $roleName): int
     {
         return $this->studentInvitesCount($user, $roleName)
             + $this->supervisorInvitesCount($user, $roleName);
     }
 
+    /** Count pending student invitations for the current role. */
     private function studentInvitesCount($user, string $roleName): int
     {
         if (!in_array($roleName, ['student', 'admin'], true)) {
@@ -106,6 +114,7 @@ class DashboardController extends Controller
             ->count();
     }
 
+    /** Count pending supervisor invitations for the current role. */
     private function supervisorInvitesCount($user, string $roleName): int
     {
         if (!in_array($roleName, ['supervisor', 'admin'], true)) {

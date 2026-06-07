@@ -1,36 +1,57 @@
 import React from "react";
-import { Box, Paper, Typography, Stack, alpha } from "@mui/material";
+import { Box, Paper, Typography, Stack, alpha, useTheme } from "@mui/material";
+import { useAuth } from "../context/AuthContext";
+import { getRoleTheme } from "../config/roleTheme";
+import {
+  resolveRoleGradient,
+  rtlSafeGradientStyle,
+} from "../utils/rtlSafeGradient";
 
-/**
- * رأس موحّد لصفحات لوحة التحكم (يتماشى مع Landing / Auth).
- */
+/** Unified dashboard page header with optional role-based gradient. */
 export default function PageHeader({
   title,
   subtitle,
   icon,
   actions,
   gradient = true,
+  roleName,
+  gradientOverride,
 }) {
+  const theme = useTheme();
+  const { user } = useAuth();
+  const resolvedRole =
+    roleName ??
+    String(user?.role?.name ?? user?.role ?? "student").toLowerCase();
+  const roleTheme = getRoleTheme(resolvedRole);
+  const gradientValue = resolveRoleGradient(
+    resolvedRole,
+    theme.palette.mode,
+    gradientOverride,
+  );
+
   return (
     <Paper
       elevation={0}
+      style={gradient ? rtlSafeGradientStyle(gradientValue) : undefined}
       sx={{
         mb: 3,
         borderRadius: 3,
         overflow: "hidden",
         border: "1px solid",
         borderColor: "divider",
-        background: gradient
-          ? (theme) =>
-              theme.palette.mode === "dark"
-                ? `linear-gradient(135deg, ${alpha("#0B1220", 0.9)} 0%, ${alpha("#1E3A5F", 0.85)} 100%)`
-                : `linear-gradient(135deg, #0B1220 0%, #1E3A5F 55%, #0F766E 100%)`
-          : "background.paper",
+        ...(!gradient && { bgcolor: "background.paper" }),
         color: gradient ? "#FFFFFF" : "text.primary",
-        "& .MuiTypography-root": gradient ? { color: "#FFFFFF" } : undefined,
-        "& .MuiChip-root": gradient
-          ? { color: "#FFFFFF", borderColor: "rgba(255,255,255,0.35)" }
+        "& .MuiTypography-root": gradient
+          ? { color: "#FFFFFF !important" }
           : undefined,
+        "& .MuiChip-root": gradient
+          ? {
+              color: "#FFFFFF",
+              bgcolor: "rgba(255,255,255,0.12)",
+              borderColor: "rgba(255,255,255,0.4)",
+            }
+          : undefined,
+        "& .MuiChip-icon": gradient ? { color: "#FFFFFF !important" } : undefined,
       }}
     >
       <Stack
@@ -49,8 +70,9 @@ export default function PageHeader({
                 borderRadius: 2.5,
                 display: "grid",
                 placeItems: "center",
-                bgcolor: gradient ? alpha("#fff", 0.12) : alpha("#3B82F6", 0.1),
-                color: gradient ? "white" : "primary.main",
+                bgcolor: gradient ? alpha("#fff", 0.14) : roleTheme.accentSoft,
+                color: gradient ? "white" : roleTheme.accent,
+                border: gradient ? `1px solid ${alpha("#fff", 0.25)}` : "none",
               }}
             >
               {icon}
@@ -65,8 +87,10 @@ export default function PageHeader({
                 variant="body2"
                 sx={{
                   mt: 0.4,
-                  opacity: gradient ? 0.88 : 0.7,
+                  opacity: gradient ? 0.92 : 0.75,
                   fontWeight: 500,
+                  maxWidth: 560,
+                  lineHeight: 1.65,
                 }}
               >
                 {subtitle}
@@ -74,7 +98,29 @@ export default function PageHeader({
             )}
           </Box>
         </Stack>
-        {actions && <Box>{actions}</Box>}
+        {actions && (
+          <Box
+            sx={{
+              width: { xs: "100%", sm: "auto" },
+              "& .MuiButton-root": {
+                color: "#FFFFFF !important",
+                border: "2px solid #FFFFFF !important",
+                bgcolor: "rgba(255,255,255,0.1) !important",
+                backgroundImage: "none !important",
+                boxShadow: "none !important",
+                "&:hover": {
+                  bgcolor: "rgba(255,255,255,0.2) !important",
+                  borderColor: "#FFFFFF !important",
+                },
+                "& .MuiButton-startIcon, & .MuiButton-endIcon": {
+                  color: "#FFFFFF !important",
+                },
+              },
+            }}
+          >
+            {actions}
+          </Box>
+        )}
       </Stack>
     </Paper>
   );

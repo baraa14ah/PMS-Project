@@ -11,11 +11,13 @@ class AuthController extends Controller
 {
     protected $authService;
 
+    /** Initialize the controller with auth service dependency. */
     public function __construct(AuthService $authService)
     {
         $this->authService = $authService;
     }
 
+    /** Register a new user account. */
     public function register(Request $request)
     {
         $result = $this->authService->register($request);
@@ -32,6 +34,7 @@ class AuthController extends Controller
         return response()->json($result, $httpStatus);
     }
 
+    /** Authenticate a user and return session payload. */
     public function login(Request $request)
     {
         $result = $this->authService->login($request);
@@ -53,11 +56,13 @@ class AuthController extends Controller
         return response()->json($result);
     }
 
+    /** Log out the authenticated user. */
     public function logout(Request $request)
     {
         return response()->json($this->authService->logout($request));
     }
 
+    /** Return the authenticated user's profile data. */
     public function profile(Request $request)
     {
         $user = $request->user();
@@ -66,17 +71,27 @@ class AuthController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        $user->load(['role', 'university']);
+        $user->load(['role', 'university', 'supervisorUniversities:id,name']);
+        $user->enrichSupervisorMembershipPayload();
+
+        $universityName = $user->university?->name;
+        if ($user->isSupervisorRole()) {
+            $activeNames = $user->active_supervisor_university_names ?? [];
+            if (!empty($activeNames)) {
+                $universityName = implode('، ', $activeNames);
+            }
+        }
 
         return response()->json([
-            'user' => $user,
-            'role' => $user->role?->name,
-            'status' => $user->status,
-            'university_id' => $user->university_id,
-            'university_name' => $user->university?->name,
+            'user'            => $user,
+            'role'            => $user->role?->name,
+            'status'          => $user->status,
+            'university_id'   => $user->university_id,
+            'university_name' => $universityName,
         ]);
     }
 
+    /** Update the authenticated user's name and email. */
     public function updateProfile(Request $request)
     {
         $request->validate([
@@ -98,6 +113,7 @@ class AuthController extends Controller
         ]);
     }
 
+    /** Change the authenticated user's password. */
     public function changePassword(Request $request)
     {
         $request->validate([

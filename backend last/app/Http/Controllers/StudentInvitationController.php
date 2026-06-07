@@ -11,11 +11,13 @@ class StudentInvitationController extends Controller
 {
     protected InvitationService $invitationService;
 
+    /** Initialize the controller with invitation service dependency. */
     public function __construct(InvitationService $invitationService)
     {
         $this->invitationService = $invitationService;
     }
 
+    /** Invite a student to join a project. */
     public function invite(Request $request, $projectId)
     {
         $request->validate(['student_id' => 'required|integer|exists:users,id']);
@@ -23,18 +25,21 @@ class StudentInvitationController extends Controller
         return response()->json($result, $result['status']);
     }
 
+    /** List invitations for the authenticated student. */
     public function myInvitations(Request $request)
     {
         $invitations = $this->invitationService->getStudentInvitations($request->user()->id);
         return response()->json(['invitations' => $invitations]);
     }
 
+    /** Accept a student project invitation. */
     public function accept(Request $request, $inviteId)
     {
         $result = $this->invitationService->acceptStudentInvitation($inviteId, $request->user());
         return response()->json($result, $result['status']);
     }
 
+    /** Reject a student project invitation. */
     public function reject(Request $request, $inviteId)
     {
         $inv = StudentInvitation::query()->forCurrentUniversity()
@@ -43,9 +48,10 @@ class StudentInvitationController extends Controller
         $inv->update(['status' => 'rejected']);
         return response()->json(['message' => 'Rejected']);
     }
-public function studentsList(Request $request)
+
+    /** List students in the current university. */
+    public function studentsList(Request $request)
     {
-        // جلب كل المستخدمين وفلترتهم برمجياً لتجنب أي خطأ 500
         $students = \App\Models\User::query()
             ->with('role')
             ->inUniversity($request->user()->university_id)

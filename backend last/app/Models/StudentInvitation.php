@@ -13,21 +13,25 @@ class StudentInvitation extends Model
         'status',
     ];
 
+    /** Returns the project this invitation targets. */
     public function project()
     {
         return $this->belongsTo(Project::class);
     }
 
+    /** Returns the invited student. */
     public function student()
     {
         return $this->belongsTo(User::class, 'student_id');
     }
 
+    /** Returns the user who sent this invitation. */
     public function sender()
     {
         return $this->belongsTo(User::class, 'sent_by_id');
     }
 
+    /** Scopes invitations to the authenticated user's university. */
     public function scopeForCurrentUniversity($query)
     {
         if (!auth()->check() || !auth()->user()->university_id) {

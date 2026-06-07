@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Paper,
@@ -14,15 +15,20 @@ import {
 } from "@mui/material";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
+import { useLanguage } from "../../context/LanguageContext";
+import GitHubLinkCard from "../../components/GitHubLinkCard";
+import { buildGithubRedirectUrl, isGithubLinked } from "../../utils/githubLink";
 
-// Icons
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
+import FolderZipRoundedIcon from "@mui/icons-material/FolderZipRounded";
+import ProjectSectionShell from "../../components/ProjectSectionShell";
 
+/** Project versions tab with upload, edit, delete, and GitHub push. */
 export default function VersionsTab({
   projectId,
   project,
@@ -36,9 +42,17 @@ export default function VersionsTab({
   setDialogLoading,
   closeDialog,
 }) {
-  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { user, authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { t, lang } = useLanguage();
+  const navigate = useNavigate();
+  const dateLocale = lang === "ar" ? "ar-EG" : "en-US";
+  const githubLinked = isGithubLinked(user);
+  const isProjectOwner =
+    Number(project?.user_id) === Number(currentUserId);
+  const showGithubBanner =
+    isProjectOwner && !!project?.github_repo_url && !githubLinked;
+  const showNoRepoWarning = isProjectOwner && !project?.github_repo_url;
 
-  // ---------------- الحالات (States) ----------------
   const [versionTitle, setVersionTitle] = useState("");
   const [versionNote, setVersionNote] = useState("");
   const [versionFile, setVersionFile] = useState(null);
@@ -52,12 +66,12 @@ export default function VersionsTab({
 
   const [pushingVersionId, setPushingVersionId] = useState(null);
 
-  // ---------------- الدوال (Functions) ----------------
+  /** Uploads a new project version file with title and notes. */
   const handleUploadVersion = async (e) => {
     e.preventDefault();
     setVersionMsg({ type: "", text: "" });
     if (!versionTitle.trim() || !versionFile)
-      return setVersionMsg({ type: "error", text: "العنوان والملف مطلوبان." });
+      return setVersionMsg({ type: "error", text: t("projectDetails.versionTitleFileRequired") });
 
     try {
       setUploadingVersion(true);
@@ -77,7 +91,7 @@ export default function VersionsTab({
       if (!res.ok)
         return setVersionMsg({
           type: "error",
-          text: data?.message || "فشل رفع الإصدار",
+          text: data?.message || t("projectDetails.versionUploadFailed"),
         });
 
       setVersions((prev) =>
@@ -86,29 +100,32 @@ export default function VersionsTab({
       setVersionTitle("");
       setVersionNote("");
       setVersionFile(null);
-      setVersionMsg({ type: "success", text: "تم رفع الإصدار بنجاح ✅" });
+      setVersionMsg({ type: "success", text: t("projectDetails.versionUploaded") });
     } catch {
-      setVersionMsg({ type: "error", text: "خطأ أثناء الاتصال بالسيرفر." });
+      setVersionMsg({ type: "error", text: t("common.serverError") });
     } finally {
       setUploadingVersion(false);
     }
   };
 
+  /** Opens inline edit form for a version. */
   const openEditVersion = (v) => {
     setEditingVersionId(v.id);
     setEditVersionTitle(v.version_title || "");
     setEditVersionDesc(v.version_description || "");
   };
 
+  /** Cancels version editing and clears form state. */
   const cancelEditVersion = () => {
     setEditingVersionId(null);
     setEditVersionTitle("");
     setEditVersionDesc("");
   };
 
+  /** Saves title and description edits for a version. */
   const handleSaveEditVersion = async (e) => {
     e.preventDefault();
-    if (!editVersionTitle.trim()) return toast.error("عنوان الإصدار مطلوب");
+    if (!editVersionTitle.trim()) return toast.error(t("projectDetails.versionTitleRequired"));
     try {
       setSavingEditVersion(true);
       const { res, data } = await apiFetch(
@@ -122,7 +139,7 @@ export default function VersionsTab({
           }),
         },
       );
-      if (!res.ok) return toast.error("فشل تعديل الإصدار");
+      if (!res.ok) return toast.error(t("projectDetails.versionEditFailed"));
 
       setVersions((prev) =>
         prev.map((v) =>
@@ -133,18 +150,19 @@ export default function VersionsTab({
       );
       cancelEditVersion();
     } catch {
-      toast.error("حدث خطأ أثناء تعديل الإصدار");
+      toast.error(t("projectDetails.versionEditError"));
     } finally {
       setSavingEditVersion(false);
     }
   };
 
+  /** Opens a confirm dialog and deletes a version on approval. */
   const handleDeleteVersion = (versionId) => {
     setDialogConfig({
       isOpen: true,
-      title: "حذف هذا الإصدار؟",
-      content: "سيتم حذف الملف المرفوع نهائياً.",
-      confirmText: "نعم، احذف",
+      title: t("projectDetails.versionDeleteTitle"),
+      content: t("projectDetails.versionDeleteContent"),
+      confirmText: t("projectDetails.versionDeleteConfirm"),
       confirmColor: "error",
       onConfirm: async () => {
         try {
@@ -155,15 +173,15 @@ export default function VersionsTab({
           );
 
           if (!res.ok) {
-            toast.error("فشل حذف الإصدار ❌");
+            toast.error(t("projectDetails.versionDeleteFailed"));
             return;
           }
 
           setVersions((prev) => prev.filter((v) => v.id !== versionId));
-          toast.success("تم حذف الإصدار بنجاح 🗑️");
+          toast.success(t("projectDetails.versionDeleted"));
           closeDialog();
         } catch {
-          toast.error("خطأ في الاتصال 🌐");
+          toast.error(t("common.serverError"));
         } finally {
           setDialogLoading(false);
         }
@@ -171,15 +189,37 @@ export default function VersionsTab({
     });
   };
 
+  /** Pushes a version file to the linked GitHub repository. */
   const handlePushToGithub = (versionId) => {
+    if (!isProjectOwner) {
+      return toast.error(t("projectDetails.onlyOwnerCanPush"));
+    }
     if (!project?.github_repo_url) {
-      return toast.error("يرجى إضافة رابط مستودع GitHub للمشروع أولاً.");
+      return toast.error(t("projectDetails.githubRepoRequired"));
+    }
+    if (!githubLinked) {
+      setDialogConfig({
+        isOpen: true,
+        title: t("github.linkRequiredTitle"),
+        content: `${t("github.linkRequiredBody")} ${t("github.notLinkedPush")}`,
+        confirmText: t("github.linkNow"),
+        confirmColor: "primary",
+        onConfirm: () => {
+          closeDialog();
+          window.location.href = buildGithubRedirectUrl(
+            API_BASE_URL,
+            currentUserId,
+            `/dashboard/projects/${projectId}?tab=versions`,
+          );
+        },
+      });
+      return;
     }
     setDialogConfig({
       isOpen: true,
-      title: "رفع إلى GitHub؟",
-      content: "سيتم دفع هذا الملف كإصدار جديد إلى مستودعك على GitHub.",
-      confirmText: "نعم، ارفع الآن",
+      title: t("projectDetails.githubPushTitle"),
+      content: t("projectDetails.githubPushContent"),
+      confirmText: t("projectDetails.githubPushConfirm"),
       confirmColor: "primary",
       onConfirm: async () => {
         try {
@@ -191,14 +231,19 @@ export default function VersionsTab({
           );
 
           if (!res.ok) {
-            toast.error(data?.message || "فشل الرفع إلى مستودع GitHub ❌");
+            const msg = data?.message || t("projectDetails.githubPushFailed");
+            if (/github|token|ربط/i.test(msg)) {
+              toast.error(t("github.linkRequiredBody"));
+            } else {
+              toast.error(msg);
+            }
             return;
           }
 
-          toast.success("تم رفع الإصدار إلى GitHub بنجاح 🚀");
+          toast.success(t("projectDetails.githubPushSuccess"));
           closeDialog();
         } catch {
-          toast.error("خطأ في الاتصال بالسيرفر 🌐");
+          toast.error(t("common.serverError"));
         } finally {
           setDialogLoading(false);
           setPushingVersionId(null);
@@ -207,51 +252,69 @@ export default function VersionsTab({
     });
   };
 
-  const hoverEffect = {
-    transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
-    "&:hover": {
-      transform: "translateY(-4px)", // رفع البطاقة 4 بيكسل للأعلى
-      boxShadow: "0 10px 25px rgba(0,0,0,0.08)", // ظل ناعم جداً
-      borderColor: "primary.main", // تغيير لون الإطار للون الأساسي (اختياري)
-    },
-  };
-  // ---------------- الواجهة (UI) ----------------
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        flex: 1,
-        minWidth: 0,
-        borderRadius: 3,
-        border: "1px solid #EAEAEA",
-      }}
+    <ProjectSectionShell
+      icon={FolderZipRoundedIcon}
+      title={t("projectDetails.versionsTitle")}
+      subtitle={t("projectDetails.versionsSubtitle")}
+      accent="#F59E0B"
     >
-      <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
-        إصدارات المشروع (Versions)
-      </Typography>
-
-      {!canUploadVersion && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          لا يمكنك رفع إصدارات لهذا المشروع.
+      {showNoRepoWarning && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2, borderRadius: 2.5 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              sx={{ fontWeight: 800, whiteSpace: "nowrap" }}
+              onClick={() =>
+                navigate(`/dashboard/projects/${projectId}?tab=overview`)
+              }
+            >
+              {t("projectDetails.goToProjectInfo")}
+            </Button>
+          }
+        >
+          <Typography sx={{ fontWeight: 800, mb: 0.5 }}>
+            {t("projectDetails.githubRepoMissingAlert")}
+          </Typography>
+          <Typography variant="body2">
+            {t("projectDetails.githubRepoMissingHint")}
+          </Typography>
         </Alert>
       )}
 
-      {/* قسم رفع الإصدار */}
+      {showGithubBanner && (
+        <GitHubLinkCard
+          variant="banner"
+          userId={currentUserId}
+          apiBaseUrl={API_BASE_URL}
+          linked={githubLinked}
+          returnTo={`/dashboard/projects/${projectId}?tab=versions`}
+        />
+      )}
+
+      {!canUploadVersion && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {t("projectDetails.cannotUploadVersions")}
+        </Alert>
+      )}
+
       {canUploadVersion && (
         <Box component="form" onSubmit={handleUploadVersion} sx={{ mb: 2 }}>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
             <TextField
               fullWidth
               size="small"
-              label="عنوان الإصدار"
+              label={t("projectDetails.versionTitle")}
               value={versionTitle}
               onChange={(e) => setVersionTitle(e.target.value)}
             />
             <TextField
               fullWidth
               size="small"
-              label="وصف (اختياري)"
+              label={t("projectDetails.versionDescOptional")}
               value={versionNote}
               onChange={(e) => setVersionNote(e.target.value)}
             />
@@ -261,7 +324,7 @@ export default function VersionsTab({
               startIcon={<UploadFileRoundedIcon />}
               sx={{ minWidth: 170 }}
             >
-              اختيار ملف
+              {t("projectDetails.chooseFile")}
               <input
                 hidden
                 type="file"
@@ -274,7 +337,7 @@ export default function VersionsTab({
               disabled={uploadingVersion}
               sx={{ minWidth: 110 }}
             >
-              {uploadingVersion ? "..." : "رفع"}
+              {uploadingVersion ? "..." : t("common.upload")}
             </Button>
           </Stack>
           {versionFile && (
@@ -283,7 +346,7 @@ export default function VersionsTab({
               color="text.secondary"
               sx={{ display: "block", mt: 1 }}
             >
-              الملف: {versionFile.name}
+              {t("projectDetails.fileLabel", { name: versionFile.name })}
             </Typography>
           )}
           {versionMsg.text && (
@@ -297,7 +360,6 @@ export default function VersionsTab({
         </Box>
       )}
 
-      {/* قسم تعديل الإصدار (يظهر عند الضغط على زر التعديل) */}
       {editingVersionId && (
         <Paper
           variant="outlined"
@@ -310,7 +372,7 @@ export default function VersionsTab({
             sx={{ mb: 1 }}
           >
             <Typography sx={{ fontWeight: 800 }}>
-              تعديل الإصدار #{editingVersionId}
+              {t("projectDetails.editVersion", { id: editingVersionId })}
             </Typography>
             <Button
               size="small"
@@ -318,7 +380,7 @@ export default function VersionsTab({
               onClick={cancelEditVersion}
               startIcon={<CancelRoundedIcon />}
             >
-              إلغاء
+              {t("common.cancel")}
             </Button>
           </Stack>
           <Box component="form" onSubmit={handleSaveEditVersion}>
@@ -326,14 +388,14 @@ export default function VersionsTab({
               <TextField
                 fullWidth
                 size="small"
-                label="عنوان الإصدار"
+                label={t("projectDetails.versionTitle")}
                 value={editVersionTitle}
                 onChange={(e) => setEditVersionTitle(e.target.value)}
               />
               <TextField
                 fullWidth
                 size="small"
-                label="الوصف"
+                label={t("projectDetails.descriptionOptional")}
                 value={editVersionDesc}
                 onChange={(e) => setEditVersionDesc(e.target.value)}
               />
@@ -344,17 +406,16 @@ export default function VersionsTab({
                 startIcon={<SaveRoundedIcon />}
                 sx={{ minWidth: 120 }}
               >
-                {savingEditVersion ? "..." : "حفظ"}
+                {savingEditVersion ? "..." : t("common.save")}
               </Button>
             </Stack>
           </Box>
         </Paper>
       )}
 
-      {/* 🎯 صندوق قائمة الإصدارات القابل للتمرير */}
       <Box
         sx={{
-          maxHeight: "450px", // نفس ارتفاع التعليقات ليظهروا بشكل متناسق
+          maxHeight: "450px",
           overflowY: "auto",
           pr: 1,
           "&::-webkit-scrollbar": { width: "6px" },
@@ -366,7 +427,7 @@ export default function VersionsTab({
       >
         {versions.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            لا توجد إصدارات بعد.
+            {t("projectDetails.noVersions")}
           </Typography>
         ) : (
           <Stack spacing={1}>
@@ -395,7 +456,7 @@ export default function VersionsTab({
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {v.created_at
-                          ? new Date(v.created_at).toLocaleString("ar-EG")
+                          ? new Date(v.created_at).toLocaleString(dateLocale)
                           : ""}
                       </Typography>
                       <Typography
@@ -403,7 +464,7 @@ export default function VersionsTab({
                         color="text.secondary"
                         sx={{ mt: 1 }}
                       >
-                        {v.version_description || "بدون وصف"}
+                        {v.version_description || t("common.noDescription")}
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={0.5}>
@@ -417,36 +478,47 @@ export default function VersionsTab({
                           rel="noreferrer"
                           download
                         >
-                          تحميل
+                          {t("common.download")}
                         </Button>
                       ) : (
                         <Chip
                           size="small"
-                          label="لا يوجد ملف"
+                          label={t("projectDetails.noFile")}
                           variant="outlined"
                         />
                       )}
 
-                      {project?.github_repo_url &&
-                        project?.user_id === currentUserId && (
-                          <Tooltip title="دفع كإصدار إلى GitHub">
-                            <IconButton
+                      {isProjectOwner &&
+                        !!project?.github_repo_url &&
+                        !!v.file_url && (
+                          <Tooltip title={t("projectDetails.pushToGithub")}>
+                            <Button
                               size="small"
-                              color="primary"
+                              variant="outlined"
+                              color="inherit"
                               onClick={() => handlePushToGithub(v.id)}
                               disabled={pushingVersionId === v.id}
+                              startIcon={
+                                pushingVersionId === v.id ? (
+                                  <CircularProgress size={16} />
+                                ) : (
+                                  <CloudUploadRoundedIcon fontSize="small" />
+                                )
+                              }
+                              sx={{
+                                fontWeight: 700,
+                                borderColor: "#24292e",
+                                color: "#24292e",
+                                whiteSpace: "nowrap",
+                              }}
                             >
-                              {pushingVersionId === v.id ? (
-                                <CircularProgress size={20} />
-                              ) : (
-                                <CloudUploadRoundedIcon fontSize="small" />
-                              )}
-                            </IconButton>
+                              {t("projectDetails.pushToGithub")}
+                            </Button>
                           </Tooltip>
                         )}
 
                       {canEditV && (
-                        <Tooltip title="تعديل">
+                        <Tooltip title={t("common.edit")}>
                           <IconButton
                             size="small"
                             onClick={() => openEditVersion(v)}
@@ -456,7 +528,7 @@ export default function VersionsTab({
                         </Tooltip>
                       )}
                       {canDeleteV && (
-                        <Tooltip title="حذف">
+                        <Tooltip title={t("common.delete")}>
                           <IconButton
                             size="small"
                             color="error"
@@ -474,6 +546,6 @@ export default function VersionsTab({
           </Stack>
         )}
       </Box>
-    </Paper>
+    </ProjectSectionShell>
   );
 }

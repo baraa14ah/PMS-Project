@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 
 import {
   Box,
@@ -27,15 +28,19 @@ import HighlightOffRoundedIcon from "@mui/icons-material/HighlightOffRounded";
 import GroupAddRoundedIcon from "@mui/icons-material/GroupAddRounded";
 import toast from "react-hot-toast";
 
+/** Student invitation inbox with accept/reject actions. */
 export default function StudentInvitations() {
   const { token, user, authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { t, lang } = useLanguage();
   const roleName = (user?.role || "").toLowerCase();
+  const dateLocale = lang === "ar" ? "ar-EG" : "en-US";
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
 
+  /** Loads pending student invitations from the API. */
   const fetchInvitations = async () => {
     try {
       setLoading(true);
@@ -46,14 +51,14 @@ export default function StudentInvitations() {
         { headers: authHeaders() },
       );
       if (!res.ok) {
-        setError(data?.message || "تعذر جلب دعوات الانضمام");
+        setError(data?.message || t("studentInvitations.loadError"));
         setItems([]);
         return;
       }
 
       setItems(data?.invitations || []);
     } catch {
-      setError("خطأ أثناء الاتصال بالسيرفر");
+      setError(t("common.serverError"));
     } finally {
       setLoading(false);
     }
@@ -65,6 +70,7 @@ export default function StudentInvitations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  /** Accepts a student invitation and redirects to projects. */
   const acceptInvite = async (inviteId) => {
     try {
       setBusyId(inviteId);
@@ -72,21 +78,21 @@ export default function StudentInvitations() {
         `${API_BASE_URL}/student/invitations/${inviteId}/accept`,
         { method: "POST", headers: authHeaders() },
       );
-      if (!res.ok) return toast.error(data?.message || "تعذر قبول الدعوة");
+      if (!res.ok) {
+        return toast.error(data?.message || t("studentInvitations.acceptError"));
+      }
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));
-      toast.success("✅ تم قبول الدعوة والانضمام للمشروع");
-
-      // ✅ مهم: بعد القبول، افتح صفحة المشاريع مباشرة (حتى يلاحظ المستخدم التحديث)
-      // إذا لا تريد تحويل، احذف السطر التالي
+      toast.success(t("studentInvitations.acceptSuccess"));
       window.location.href = "/dashboard/projects";
     } catch {
-      toast.error("حدث خطأ أثناء قبول الدعوة");
+      toast.error(t("common.serverError"));
     } finally {
       setBusyId(null);
     }
   };
 
+  /** Rejects a student invitation. */
   const rejectInvite = async (inviteId) => {
     try {
       setBusyId(inviteId);
@@ -94,29 +100,29 @@ export default function StudentInvitations() {
         `${API_BASE_URL}/student/invitations/${inviteId}/reject`,
         { method: "POST", headers: authHeaders() },
       );
-      if (!res.ok) return toast.error(data?.message || "تعذر رفض الدعوة");
+      if (!res.ok) {
+        return toast.error(data?.message || t("studentInvitations.rejectError"));
+      }
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));
-      toast.success("تم رفض الدعوة");
+      toast.success(t("studentInvitations.rejectSuccess"));
     } catch {
-      toast.error("حدث خطأ أثناء رفض الدعوة");
+      toast.error(t("common.serverError"));
     } finally {
       setBusyId(null);
     }
   };
 
-  // ✅ حماية UI
   if (roleName !== "student" && roleName !== "admin") {
     return (
       <Alert severity="warning" sx={{ borderRadius: 2 }}>
-        هذه الصفحة مخصصة للطلاب فقط.
+        {t("studentInvitations.studentsOnly")}
       </Alert>
     );
   }
 
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
-      {/* Header */}
       <Stack
         direction="row"
         alignItems="center"
@@ -125,10 +131,10 @@ export default function StudentInvitations() {
       >
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 900 }}>
-            دعوات الانضمام للمشاريع
+            {t("studentInvitations.title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            هنا ستجد دعوات الانضمام التي وصلتك ويمكنك قبولها أو رفضها.
+            {t("studentInvitations.subtitle")}
           </Typography>
         </Box>
 
@@ -138,51 +144,47 @@ export default function StudentInvitations() {
           onClick={fetchInvitations}
           sx={{ borderRadius: 2, textTransform: "none", fontWeight: 900 }}
         >
-          تحديث
+          {t("common.refresh")}
         </Button>
       </Stack>
 
-      {/* Loading */}
       {loading && (
         <Card sx={{ borderRadius: 3, border: "1px solid #E7E8F0" }}>
           <CardContent>
             <Stack direction="row" spacing={2} alignItems="center">
               <CircularProgress size={22} />
               <Typography sx={{ fontWeight: 700 }}>
-                جارِ تحميل الدعوات...
+                {t("studentInvitations.loading")}
               </Typography>
             </Stack>
           </CardContent>
         </Card>
       )}
 
-      {/* Error */}
       {!loading && error && (
         <Alert severity="error" sx={{ borderRadius: 2 }}>
           {error}
         </Alert>
       )}
 
-      {/* Empty */}
       {!loading && !error && items.length === 0 && (
         <Card sx={{ borderRadius: 3, border: "1px solid #E7E8F0" }}>
           <CardContent>
             <Stack spacing={1} alignItems="flex-start">
               <Chip
                 icon={<GroupAddRoundedIcon />}
-                label="لا توجد دعوات"
+                label={t("studentInvitations.empty")}
                 variant="outlined"
                 sx={{ fontWeight: 800 }}
               />
               <Typography color="text.secondary">
-                عندما يدعوك أحد للانضمام لمشروع ستظهر الدعوة هنا.
+                {t("studentInvitations.emptyDesc")}
               </Typography>
             </Stack>
           </CardContent>
         </Card>
       )}
 
-      {/* Table */}
       {!loading && !error && items.length > 0 && (
         <Card sx={{ borderRadius: 3, border: "1px solid #E7E8F0" }}>
           <CardContent>
@@ -193,9 +195,12 @@ export default function StudentInvitations() {
               sx={{ mb: 1 }}
             >
               <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                الدعوات الواردة
+                {t("studentInvitations.incoming")}
               </Typography>
-              <Chip label={`${items.length} دعوة`} size="small" />
+              <Chip
+                label={t("studentInvitations.countBadge", { count: items.length })}
+                size="small"
+              />
             </Stack>
 
             <Divider sx={{ mb: 2 }} />
@@ -203,11 +208,17 @@ export default function StudentInvitations() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 900 }}>المشروع</TableCell>
-                  <TableCell sx={{ fontWeight: 900 }}>المرسل</TableCell>
-                  <TableCell sx={{ fontWeight: 900 }}>تاريخ الإرسال</TableCell>
+                  <TableCell sx={{ fontWeight: 900 }}>
+                    {t("studentInvitations.project")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 900 }}>
+                    {t("studentInvitations.sender")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 900 }}>
+                    {t("studentInvitations.sentAt")}
+                  </TableCell>
                   <TableCell sx={{ fontWeight: 900, width: 160 }}>
-                    إجراءات
+                    {t("studentInvitations.actions")}
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -223,7 +234,7 @@ export default function StudentInvitations() {
                         <Typography sx={{ fontWeight: 800 }}>
                           {inv.sender?.name ||
                             inv.project?.user?.name ||
-                            "مرسل الدعوة"}
+                            t("studentInvitations.senderFallback")}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {inv.sender?.email || ""}
@@ -234,14 +245,14 @@ export default function StudentInvitations() {
                     <TableCell>
                       <Typography variant="body2" color="text.secondary">
                         {inv.created_at
-                          ? new Date(inv.created_at).toLocaleString("ar-EG")
+                          ? new Date(inv.created_at).toLocaleString(dateLocale)
                           : "—"}
                       </Typography>
                     </TableCell>
 
                     <TableCell>
                       <Stack direction="row" spacing={1}>
-                        <Tooltip title="قبول">
+                        <Tooltip title={t("common.approve")}>
                           <span>
                             <IconButton
                               color="success"
@@ -253,7 +264,7 @@ export default function StudentInvitations() {
                           </span>
                         </Tooltip>
 
-                        <Tooltip title="رفض">
+                        <Tooltip title={t("common.reject")}>
                           <span>
                             <IconButton
                               color="error"

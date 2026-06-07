@@ -14,10 +14,12 @@ import {
 import DomainDisabledRoundedIcon from "@mui/icons-material/DomainDisabledRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 
+/** Shown when the user has no active university membership. */
 export default function AccountBlocked() {
   const { logout } = useAuth();
   const { t, dir } = useLanguage();
 
+  /** Signs the user out and returns to the login flow. */
   const handleLogout = () => {
     logout();
   };

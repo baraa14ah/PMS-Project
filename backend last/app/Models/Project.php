@@ -20,64 +20,54 @@ class Project extends Model
         'supervisor_id',
         'university_id',
     ];
-    
-    /**
- * العلاقة بين المشروع والتعليقات
- */
-public function comments()
-{
-    // المشروع الواحد له العديد من التعليقات
-    return $this->hasMany(\App\Models\Comment::class);
-}
 
+    /** Returns comments posted on this project. */
+    public function comments()
+    {
+        return $this->hasMany(\App\Models\Comment::class);
+    }
+
+    /** Returns the user who owns this project. */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-
-    
+    /** Returns tasks associated with this project. */
     public function tasks()
-{
-    return $this->hasMany(Task::class);
-}
-
-
-public function supervisor()
-{
-    return $this->belongsTo(User::class, 'supervisor_id');
-    
-}  
-
-
-public function commits()
-{
-    return $this->hasMany(GitCommit::class);
-}
-
-
-public function versions()
-{
-    return $this->hasMany(ProjectVersion::class);
-}
-
-public function students()
-{
-    return $this->belongsToMany(User::class, 'project_user');
-}
-
-
-
-
-public function members()
     {
-       
-        return $this->belongsToMany(User::class, 'project_members', 'project_id', 'student_id')
-                    ->withPivot('status') 
-                    ->withTimestamps();
+        return $this->hasMany(Task::class);
     }
 
+    /** Returns the supervisor assigned to this project. */
+    public function supervisor()
+    {
+        return $this->belongsTo(User::class, 'supervisor_id');
+    }
 
- 
+    /** Returns git commits linked to this project. */
+    public function commits()
+    {
+        return $this->hasMany(GitCommit::class);
+    }
 
+    /** Returns version snapshots for this project. */
+    public function versions()
+    {
+        return $this->hasMany(ProjectVersion::class);
+    }
+
+    /** Returns students linked via the project_user pivot. */
+    public function students()
+    {
+        return $this->belongsToMany(User::class, 'project_user');
+    }
+
+    /** Returns project members with pivot status and timestamps. */
+    public function members()
+    {
+        return $this->belongsToMany(User::class, 'project_members', 'project_id', 'student_id')
+                    ->withPivot('status')
+                    ->withTimestamps();
+    }
 }

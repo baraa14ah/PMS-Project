@@ -36,9 +36,11 @@ import {
   roleCardSx,
   AUTH_COLORS,
 } from "../components/authStyles";
+import { AUTH_PRIMARY_BTN_CLASS } from "../utils/rtlSafeGradient";
 
+/** Registration page for students and supervisors. */
 export default function Register() {
-  const { t } = useLanguage();
+  const { t, isRtl } = useLanguage();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -52,6 +54,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [universities, setUniversities] = useState([]);
   const [universityId, setUniversityId] = useState("");
+  const [universityIds, setUniversityIds] = useState([]);
   const [studentNumber, setStudentNumber] = useState("");
   const [univLoading, setUnivLoading] = useState(true);
   const [univError, setUnivError] = useState("");
@@ -60,6 +63,7 @@ export default function Register() {
   const passLong = password.length >= 6;
 
   useEffect(() => {
+    /** Loads the public university list for role-specific selection. */
     const fetchUniversities = async () => {
       try {
         setUnivLoading(true);
@@ -84,11 +88,14 @@ export default function Register() {
   const canSubmit = useMemo(() => {
     if (loading || !name.trim() || !email.trim() || !password.trim()) return false;
     if (password !== password2 || password.length < 6) return false;
-    if (!universityId || univLoading || univError || universities.length === 0) return false;
+    if (univLoading || univError || universities.length === 0) return false;
+    if (role === "supervisor" && universityIds.length === 0) return false;
+    if (role === "student" && !universityId) return false;
     if (role === "student" && !studentNumber.trim()) return false;
     return true;
-  }, [name, email, password, password2, role, loading, universityId, studentNumber, univLoading, univError, universities.length]);
+  }, [name, email, password, password2, role, loading, universityId, universityIds, studentNumber, univLoading, univError, universities.length]);
 
+  /** Validates form data and posts a new account registration request. */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
@@ -109,8 +116,15 @@ export default function Register() {
           email,
           password,
           role,
-          university_id: universityId,
-          ...(role === "student" ? { student_number: studentNumber.trim() } : {}),
+          ...(role === "supervisor"
+            ? {
+                university_ids: universityIds.map(Number),
+                university_id: Number(universityIds[0]),
+              }
+            : {
+                university_id: universityId,
+                student_number: studentNumber.trim(),
+              }),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -150,49 +164,55 @@ export default function Register() {
       )}
 
       <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
-        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: AUTH_COLORS.label }}>
           {t("auth.accountType")}
         </Typography>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 2 }}>
           <Paper
             elevation={0}
-            onClick={() => setRole("student")}
+            onClick={() => {
+              setRole("student");
+              setUniversityIds([]);
+            }}
             sx={{ flex: 1, ...roleCardSx(role === "student", AUTH_COLORS.teal) }}
           >
             <Stack direction="row" spacing={1} alignItems="center">
               <PersonRoundedIcon sx={{ color: AUTH_COLORS.teal }} />
               <Box>
-                <Typography sx={{ fontWeight: 900 }}>{t("auth.student")}</Typography>
+                <Typography sx={{ fontWeight: 800, color: AUTH_COLORS.heading }}>{t("auth.student")}</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {t("nav.projects")}
                 </Typography>
               </Box>
               {role === "student" && (
-                <CheckCircleRoundedIcon sx={{ color: AUTH_COLORS.teal, ml: "auto" }} />
+                <CheckCircleRoundedIcon sx={{ color: AUTH_COLORS.teal, marginInlineStart: "auto" }} />
               )}
             </Stack>
           </Paper>
           <Paper
             elevation={0}
-            onClick={() => setRole("supervisor")}
+            onClick={() => {
+              setRole("supervisor");
+              setUniversityId("");
+            }}
             sx={{ flex: 1, ...roleCardSx(role === "supervisor", AUTH_COLORS.blue) }}
           >
             <Stack direction="row" spacing={1} alignItems="center">
               <SupervisorAccountRoundedIcon sx={{ color: AUTH_COLORS.blue }} />
               <Box>
-                <Typography sx={{ fontWeight: 900 }}>{t("auth.supervisor")}</Typography>
+                <Typography sx={{ fontWeight: 800, color: AUTH_COLORS.heading }}>{t("auth.supervisor")}</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {t("nav.supervisorInvitations")}
                 </Typography>
               </Box>
               {role === "supervisor" && (
-                <CheckCircleRoundedIcon sx={{ color: AUTH_COLORS.blue, ml: "auto" }} />
+                <CheckCircleRoundedIcon sx={{ color: AUTH_COLORS.blue, marginInlineStart: "auto" }} />
               )}
             </Stack>
           </Paper>
         </Stack>
 
-        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: AUTH_COLORS.label }}>
           {t("auth.fullName")}
         </Typography>
         <TextField
@@ -210,7 +230,7 @@ export default function Register() {
           sx={authFieldSx}
         />
 
-        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1, color: AUTH_COLORS.label }}>
           {t("auth.email")}
         </Typography>
         <TextField
@@ -229,20 +249,43 @@ export default function Register() {
           sx={authFieldSx}
         />
 
-        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1 }}>
-          {t("auth.university")}
+        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1, color: AUTH_COLORS.label }}>
+          {role === "supervisor" ? t("auth.universities") : t("auth.university")}
         </Typography>
         {univLoading ? (
           <Stack direction="row" spacing={1} alignItems="center" sx={{ py: 1 }}>
             <CircularProgress size={18} />
             <Typography variant="body2" color="text.secondary">
-              جارِ تحميل الجامعات...
+              {t("auth.loadingUniversities")}
             </Typography>
           </Stack>
         ) : univError ? (
           <Alert severity="error">{univError}</Alert>
         ) : universities.length === 0 ? (
-          <Alert severity="warning">لا توجد جامعات متاحة حالياً.</Alert>
+          <Alert severity="warning">{t("auth.noUniversities")}</Alert>
+        ) : role === "supervisor" ? (
+          <TextField
+            select
+            fullWidth
+            SelectProps={{ multiple: true }}
+            value={universityIds}
+            onChange={(e) => setUniversityIds(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SchoolOutlinedIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            }}
+            sx={authFieldSx}
+            helperText={t("auth.supervisorUniversitiesHint")}
+          >
+            {universities.map((uni) => (
+              <MenuItem key={uni.id} value={uni.id}>
+                {uni.name}
+              </MenuItem>
+            ))}
+          </TextField>
         ) : (
           <TextField
             select
@@ -271,7 +314,7 @@ export default function Register() {
 
         <Collapse in={role === "student"}>
           <Box sx={{ mt: 2 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: AUTH_COLORS.label }}>
               {t("auth.studentNumber")}
             </Typography>
             <TextField
@@ -285,7 +328,7 @@ export default function Register() {
           </Box>
         </Collapse>
 
-        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1, color: AUTH_COLORS.label }}>
           {t("auth.password")}
         </Typography>
         <TextField
@@ -314,7 +357,7 @@ export default function Register() {
           <PassHint ok={passLong} label={t("auth.passMin")} />
         </Stack>
 
-        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, mt: 2, mb: 1, color: AUTH_COLORS.label }}>
           {t("auth.confirmPassword")}
         </Typography>
         <TextField
@@ -349,7 +392,10 @@ export default function Register() {
           fullWidth
           disabled={!canSubmit}
           variant="contained"
-          startIcon={!loading && <HowToRegRoundedIcon />}
+          className={AUTH_PRIMARY_BTN_CLASS}
+          {...(isRtl
+            ? { endIcon: !loading && <HowToRegRoundedIcon /> }
+            : { startIcon: !loading && <HowToRegRoundedIcon /> })}
           sx={authPrimaryBtnSx}
         >
           {loading ? (
@@ -365,7 +411,7 @@ export default function Register() {
         <Divider sx={{ my: 3 }} />
         <Typography variant="body2" sx={{ color: AUTH_COLORS.muted, textAlign: "center" }}>
           {t("auth.hasAccount")}{" "}
-          <Link component={RouterLink} to="/login" underline="hover" sx={{ fontWeight: 900, color: AUTH_COLORS.navy }}>
+          <Link component={RouterLink} to="/login" underline="hover" sx={{ fontWeight: 800, color: AUTH_COLORS.heading }}>
             {t("auth.login")}
           </Link>
         </Typography>
@@ -374,6 +420,7 @@ export default function Register() {
   );
 }
 
+/** Inline password rule hint with pass/fail styling. */
 function PassHint({ ok, label }) {
   return (
     <Typography

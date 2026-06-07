@@ -9,10 +9,12 @@ use Illuminate\Validation\ValidationException;
 
 class PasswordResetHelpController extends Controller
 {
+    /** Initialize the controller with password reset help service. */
     public function __construct(
         protected PasswordResetHelpService $helpService,
     ) {}
 
+    /** Submit a password reset help request. */
     public function requestHelp(Request $request)
     {
         $request->validate([
@@ -32,6 +34,7 @@ class PasswordResetHelpController extends Controller
         ]);
     }
 
+    /** List pending password reset requests for the admin's university. */
     public function index(Request $request)
     {
         $admin = $request->user();
@@ -43,6 +46,7 @@ class PasswordResetHelpController extends Controller
         ]);
     }
 
+    /** Issue a temporary password for a reset request. */
     public function temporaryPassword(Request $request, int $id)
     {
         $admin = $request->user();
@@ -62,6 +66,7 @@ class PasswordResetHelpController extends Controller
         ]);
     }
 
+    /** Dismiss a pending password reset request. */
     public function dismiss(Request $request, int $id)
     {
         $admin = $request->user();
@@ -79,6 +84,7 @@ class PasswordResetHelpController extends Controller
         ]);
     }
 
+    /** Find a pending reset request scoped to the admin's university. */
     private function findPendingForAdmin(int $id, int $universityId): PasswordResetRequest
     {
         $resetRequest = PasswordResetRequest::query()

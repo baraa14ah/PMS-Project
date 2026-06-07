@@ -16,12 +16,14 @@ import HourglassEmptyRoundedIcon from "@mui/icons-material/HourglassEmptyRounded
 import BlockRoundedIcon from "@mui/icons-material/BlockRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 
+/** Shown when account is pending approval or rejected by admin. */
 export default function PendingApproval() {
   const { status, logout } = useAuth();
   const { t, dir } = useLanguage();
 
   const isRejected = status === "rejected";
 
+  /** Signs the user out and returns to the login flow. */
   const handleLogout = () => {
     logout();
   };

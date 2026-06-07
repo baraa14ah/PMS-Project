@@ -15,6 +15,7 @@ import { useLanguage } from "./LanguageContext";
 
 const ThemeContext = createContext();
 
+/** Hook for light/dark mode and the toggle action. */
 export const useThemeMode = () => useContext(ThemeContext);
 
 const cacheRtl = createCache({
@@ -27,6 +28,7 @@ const cacheLtr = createCache({
   stylisPlugins: [prefixer],
 });
 
+/** Wraps the app with MUI theme, RTL/LTR Emotion cache, and CssBaseline. */
 export default function CustomThemeProvider({ children }) {
   const { dir, lang } = useLanguage();
   const [mode, setMode] = useState(
@@ -37,6 +39,7 @@ export default function CustomThemeProvider({ children }) {
     localStorage.setItem("themeMode", mode);
   }, [mode]);
 
+  /** Switches between light and dark palette modes. */
   const toggleTheme = () => {
     setMode((prev) => (prev === "light" ? "dark" : "light"));
   };
@@ -50,7 +53,7 @@ export default function CustomThemeProvider({ children }) {
 
   return (
     <ThemeContext.Provider value={{ mode, toggleTheme }}>
-      <CacheProvider key={dir} value={cache}>
+      <CacheProvider key={`${dir}-${mode}`} value={cache}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
           {children}

@@ -19,6 +19,7 @@ import LockResetRoundedIcon from "@mui/icons-material/LockResetRounded";
 import AuthPageShell from "../components/AuthPageShell";
 import { API_BASE_URL } from "../utils/api";
 
+/** Password reset form opened from the email token link. */
 export default function ResetPassword() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ export default function ResetPassword() {
     [email, token, password, password2, loading],
   );
 
+  /** Submits the new password to the reset API endpoint. */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");

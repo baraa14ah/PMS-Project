@@ -1,21 +1,26 @@
 import React from "react";
-import { Box } from "@mui/material";
+import { Box, alpha } from "@mui/material";
 import Logo from "../assets/byte.png";
+import { getRoleTheme } from "../config/roleTheme";
+import {
+  GRADIENT,
+  logoRoleGradient,
+  rtlSafeGradientStyle,
+} from "../utils/rtlSafeGradient";
 
 const SIZES = { sm: 36, md: 44, lg: 56, xl: 72 };
 
-/**
- * الشعار أبيض على خلفية داكنة في الملف — على الخلفيات الفاتحة نضع حاوية داكنة.
- * variant: "onDark" بدون حاوية | "onLight" حاوية كحلية | "hero" حاوية متدرجة أكبر
- */
+/** Renders the app logo with variant-specific background and role theming. */
 export default function BrandLogo({
   size = "md",
   variant = "onLight",
+  roleName,
   sx = {},
 }) {
   const px = typeof size === "number" ? size : SIZES[size] || SIZES.md;
-  const pad = variant === "hero" ? 1.25 : 0.65;
+  const pad = variant === "hero" || variant === "role" ? 1.25 : 0.65;
   const box = px + pad * 8 * 2;
+  const roleTheme = variant === "role" ? getRoleTheme(roleName) : null;
 
   const shell =
     variant === "onDark"
@@ -24,24 +29,36 @@ export default function BrandLogo({
           border: "none",
           boxShadow: "none",
         }
-      : variant === "hero"
+      : variant === "role" && roleTheme
         ? {
-            background: "linear-gradient(135deg, #0B1220 0%, #1E3A5F 50%, #0F766E 100%)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            boxShadow: "0 12px 32px rgba(15,23,42,0.35)",
+            border: `1px solid ${alpha("#fff", 0.22)}`,
+            boxShadow: `0 6px 20px ${alpha(roleTheme.accent, 0.32)}`,
           }
-        : {
-            bgcolor: "#0B1220",
-            border: "1px solid #1E293B",
-            boxShadow: "0 4px 14px rgba(15,23,42,0.2)",
-          };
+        : variant === "hero"
+          ? {
+              border: "1px solid rgba(255,255,255,0.15)",
+              boxShadow: "0 12px 32px rgba(15,23,42,0.35)",
+            }
+          : {
+              bgcolor: "#0B1220",
+              border: "1px solid #1E293B",
+              boxShadow: "0 4px 14px rgba(15,23,42,0.2)",
+            };
+
+  const gradientStyle =
+    variant === "role" && roleName
+      ? rtlSafeGradientStyle(logoRoleGradient(roleName))
+      : variant === "hero"
+        ? rtlSafeGradientStyle(GRADIENT.logoHero)
+        : undefined;
 
   return (
     <Box
+      style={gradientStyle}
       sx={{
         width: box,
         height: box,
-        borderRadius: variant === "hero" ? 3 : 2,
+        borderRadius: variant === "hero" || variant === "role" ? 3 : 2,
         display: "grid",
         placeItems: "center",
         flexShrink: 0,

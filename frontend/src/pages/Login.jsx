@@ -24,9 +24,11 @@ import AuthPageShell from "../components/AuthPageShell";
 import { useLanguage } from "../context/LanguageContext";
 import { API_BASE_URL } from "../utils/api";
 import { authFieldSx, authPrimaryBtnSx, AUTH_COLORS } from "../components/authStyles";
+import { AUTH_PRIMARY_BTN_CLASS } from "../utils/rtlSafeGradient";
 
+/** Login page with email/password authentication. */
 export default function Login() {
-  const { t } = useLanguage();
+  const { t, isRtl } = useLanguage();
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -42,6 +44,7 @@ export default function Login() {
     [email, password, loading],
   );
 
+  /** Submits credentials to the API and navigates to dashboard on success. */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
@@ -55,17 +58,17 @@ export default function Login() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.token) {
         await login(data.token);
-        toast.success("تم تسجيل الدخول بنجاح");
+        toast.success(t("auth.loginSuccess"));
         navigate("/dashboard");
       } else {
         setMessageType("error");
-        setMessage(data?.message || "بيانات الدخول غير صحيحة");
-        toast.error(data?.message || "بيانات الدخول غير صحيحة");
+        setMessage(data?.message || t("auth.loginFailed"));
+        toast.error(data?.message || t("auth.loginFailed"));
       }
     } catch {
       setMessageType("error");
-      setMessage("خطأ في الاتصال بالسيرفر");
-      toast.error("خطأ في الاتصال بالسيرفر");
+      setMessage(t("common.serverError"));
+      toast.error(t("common.serverError"));
     }
     setLoading(false);
   };
@@ -84,7 +87,7 @@ export default function Login() {
       )}
 
       <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
-        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: focused === "email" ? AUTH_COLORS.blue : "inherit" }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: focused === "email" ? AUTH_COLORS.blue : AUTH_COLORS.label }}>
           {t("auth.email")}
         </Typography>
         <TextField
@@ -108,7 +111,7 @@ export default function Login() {
 
         <Typography
           variant="body2"
-          sx={{ fontWeight: 700, mt: 2.5, mb: 1, color: focused === "pass" ? AUTH_COLORS.blue : "inherit" }}
+          sx={{ fontWeight: 700, mt: 2.5, mb: 1, color: focused === "pass" ? AUTH_COLORS.blue : AUTH_COLORS.label }}
         >
           {t("auth.password")}
         </Typography>
@@ -142,7 +145,10 @@ export default function Login() {
           fullWidth
           disabled={!canSubmit}
           variant="contained"
-          startIcon={!loading && <LoginRoundedIcon />}
+          className={AUTH_PRIMARY_BTN_CLASS}
+          {...(isRtl
+            ? { endIcon: !loading && <LoginRoundedIcon /> }
+            : { startIcon: !loading && <LoginRoundedIcon /> })}
           sx={authPrimaryBtnSx}
         >
           {loading ? (
@@ -165,7 +171,7 @@ export default function Login() {
 
         <Typography variant="body2" color="text.secondary" textAlign="center">
           {t("auth.noAccount")}{" "}
-          <MuiLink component={RouterLink} to="/register" underline="hover" sx={{ fontWeight: 900, color: AUTH_COLORS.navy }}>
+          <MuiLink component={RouterLink} to="/register" underline="hover" sx={{ fontWeight: 800, color: AUTH_COLORS.heading }}>
             {t("auth.createAccount")}
           </MuiLink>
         </Typography>

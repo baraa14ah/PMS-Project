@@ -6,32 +6,32 @@ use App\Models\Task;
 
 class TaskRepository
 {
-    // إنشاء مهمة جديدة
+    /** Create and persist a new task. */
     public function create(array $data)
     {
         return Task::create($data);
     }
 
-    // جلب جميع المهام لمشروع معيّن
+    /** Get all tasks belonging to the given project. */
     public function getByProjectId($projectId)
     {
         return Task::query()->where('project_id', $projectId)->get();
     }
 
-    // جلب مهمة واحدة حسب ID
+    /** Find a task by ID. */
     public function find($id)
     {
         return Task::query()->find($id);
     }
 
-    // تحديث مهمة
+    /** Update the given task with the provided data. */
     public function update(Task $task, array $data)
     {
         $task->update($data);
         return $task;
     }
 
-    // حذف مهمة
+    /** Delete the given task. */
     public function delete(Task $task)
     {
         return $task->delete();

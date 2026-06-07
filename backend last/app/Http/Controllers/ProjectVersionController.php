@@ -5,36 +5,27 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\ProjectVersion;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Services\NotificationService;
+use App\Support\ProjectAccess;
 use App\Services\ProjectVersionService;
 
 class ProjectVersionController extends Controller
 {
     protected NotificationService $notifications;
 
+    /** Initialize the controller with notification service dependency. */
     public function __construct(NotificationService $notifications)
     {
         $this->notifications = $notifications;
     }
 
+    /** Check whether the user can access the project. */
     private function canAccessProject(Request $request, Project $project): bool
     {
-        $user = $request->user();
-        if (!$user) return false;
-        
-        return $project->user_id === $user->id
-            || $project->supervisor_id === $user->id
-            || DB::table('project_members')
-                ->join('projects', 'project_members.project_id', '=', 'projects.id')
-                ->where('projects.id', $project->id)
-                ->where('projects.university_id', $user->university_id)
-                ->where('project_members.student_id', $user->id)
-                ->where('project_members.status', 'accepted')
-                ->exists();
+        return ProjectAccess::canAccess($request->user(), $project);
     }
 
-    // 1. عرض الإصدارات
+    /** List versions for a project. */
     public function index(Request $request, $projectId)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -62,13 +53,13 @@ class ProjectVersionController extends Controller
         ]);
     }
 
-    // 2. ✅ دالة الرفع التي كانت مفقودة (upload)
+    /** Upload a new project version file. */
     public function upload(Request $request, $projectId, ProjectVersionService $versionService)
     {
         $request->validate([
             'version_title' => 'required|string|max:255',
             'version_description' => 'nullable|string',
-            'file' => 'required|file|max:20480', // الحد الأقصى 20 ميجا
+            'file' => 'required|file|max:20480',
         ]);
 
         $data = [
@@ -77,13 +68,12 @@ class ProjectVersionController extends Controller
             'version_description' => $request->version_description,
         ];
 
-        // توجيه العمل للسيرفيس
         $result = $versionService->uploadVersion($data, $request->file('file'), $request->user());
 
         return response()->json($result, $result['status'] ?? 200);
     }
 
-    // 3. ✅ دالة التعديل (update)
+    /** Update version title and description. */
     public function update(Request $request, $versionId)
     {
         $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
@@ -108,42 +98,37 @@ class ProjectVersionController extends Controller
         ]);
     }
 
-    // 4. ✅ دالة الحذف (delete / destroy)
+    /** Delete a project version. */
     public function destroy(Request $request, $versionId, ProjectVersionService $versionService)
     {
         $result = $versionService->deleteVersion($versionId, $request->user());
         return response()->json($result, $result['status'] ?? 200);
     }
-    
-    // دعم اسم الدالة delete في حال كان الـ Route لديك يستخدمها
+
+    /** Route alias that delegates to destroy. */
     public function delete(Request $request, $versionId, ProjectVersionService $versionService)
     {
         return $this->destroy($request, $versionId, $versionService);
     }
 
-    // 5. ✅ دالة التايم لاين (timeline)
+    /** Return version timeline for a project. */
     public function timeline(Request $request, $projectId, ProjectVersionService $versionService)
     {
         $result = $versionService->getTimeline($projectId, $request->user());
         return response()->json($result, $result['status'] ?? 200);
     }
 
-    // 6. ✅ دالة الرفع إلى GitHub
+    /** Push a project version to GitHub. */
     public function pushToGithub(Request $request, $id, ProjectVersionService $versionService)
     {
-        // 1. تعريف المستخدم الحالي
         $user = $request->user();
-    
-        // 2. التحقق من وجود التوكن (الحماية)
+
         if (!$user->github_token) {
             return response()->json(['message' => 'يرجى ربط حسابك بـ GitHub أولاً.'], 403);
         }
-    
-        // 3. توجيه المهمة للسيرفيس (المسؤول عن التنفيذ الفعلي)
-        // لاحظ أننا لم نعد بحاجة لكود Http هنا لأن السيرفيس يقوم بالواجب
+
         $result = $versionService->pushToGithub($id, $user);
-    
-        // 4. إرسال النتيجة النهائية للفرونت إند
+
         return response()->json($result, $result['status'] ?? 200);
     }
 }

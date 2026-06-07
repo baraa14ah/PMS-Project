@@ -32,6 +32,7 @@ import {
   formatNotificationTime,
 } from "../utils/notifications";
 
+/** Notifications inbox with read, delete, and filter actions. */
 export default function Notifications() {
   const { t } = useLanguage();
   const { token, authHeaders, apiFetch, API_BASE_URL } = useAuth();
@@ -44,6 +45,7 @@ export default function Notifications() {
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState("all");
 
+  /** Loads all notifications and syncs the unread count. */
   const fetchAll = async () => {
     try {
       setLoading(true);
@@ -51,14 +53,14 @@ export default function Notifications() {
       const { res, data } = await apiFetch(`${API_BASE_URL}/notifications`, {
         headers: authHeaders(),
       });
-      if (!res.ok) throw new Error(data?.message || "تعذر جلب الإشعارات");
+      if (!res.ok) throw new Error(data?.message || t("notifications.loadError"));
       const list = data?.notifications;
       setItems(Array.isArray(list) ? list : []);
       if (data?.unread_count !== undefined) {
         setUnreadCount(Number(data.unread_count));
       }
     } catch (e) {
-      setError(e?.message || "خطأ في التحميل");
+      setError(e?.message || t("common.error"));
     } finally {
       setLoading(false);
     }
@@ -69,6 +71,7 @@ export default function Notifications() {
     return items;
   }, [items, filter]);
 
+  /** Marks one notification as read with optimistic UI update. */
   const markRead = async (id) => {
     setUnreadCount((prev) => Math.max(0, prev - 1));
     setItems((prev) =>
@@ -86,6 +89,7 @@ export default function Notifications() {
     }
   };
 
+  /** Marks every notification as read. */
   const markAll = async () => {
     setUnreadCount(0);
     setItems((prev) =>
@@ -104,6 +108,7 @@ export default function Notifications() {
     }
   };
 
+  /** Deletes a single notification and adjusts unread count. */
   const deleteOne = async (id, isUnread) => {
     if (isUnread) setUnreadCount((prev) => Math.max(0, prev - 1));
     setItems((prev) => prev.filter((n) => n.id !== id));
@@ -117,6 +122,7 @@ export default function Notifications() {
     }
   };
 
+  /** Clears all notifications from the inbox. */
   const deleteAll = async () => {
     setItems([]);
     setUnreadCount(0);
@@ -130,6 +136,7 @@ export default function Notifications() {
     }
   };
 
+  /** Marks unread if needed and navigates to the notification target. */
   const openNotification = async (n) => {
     if (n?.id && !n?.read_at) await markRead(n.id);
     navigate(resolveNotificationUrl(n));
@@ -198,7 +205,7 @@ export default function Notifications() {
           )}
 
           {!loading && error && (
-            <Alert severity="error" action={<Button onClick={fetchAll}>إعادة</Button>}>
+            <Alert severity="error" action={<Button onClick={fetchAll}>{t("common.retry")}</Button>}>
               {error}
             </Alert>
           )}
@@ -211,7 +218,7 @@ export default function Notifications() {
                   ? t("notifications.emptyUnread")
                   : t("notifications.empty")
               }
-              description="ستظهر هنا التنبيهات عند المهام والتعليقات والدعوات وغيرها."
+              description={t("notifications.emptyDescription")}
             />
           )}
 
@@ -234,10 +241,11 @@ export default function Notifications() {
   );
 }
 
+/** Single notification row with actions and type styling. */
 function NotificationCard({ notification: n, onOpen, onMarkRead, onDelete }) {
-  const { t } = useLanguage();
-  const { type, title, body } = parseNotification(n);
-  const meta = getNotificationMeta(type);
+  const { t, lang } = useLanguage();
+  const { type, title, body } = parseNotification(n, t);
+  const meta = getNotificationMeta(type, t);
   const Icon = meta.icon;
   const isUnread = !n.read_at;
 
@@ -303,7 +311,7 @@ function NotificationCard({ notification: n, onOpen, onMarkRead, onDelete }) {
             </Typography>
           ) : null}
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            {formatNotificationTime(n.created_at)}
+            {formatNotificationTime(n.created_at, t, lang)}
           </Typography>
         </Box>
         <Stack direction="row" spacing={0.5} onClick={(e) => e.stopPropagation()}>

@@ -7,20 +7,23 @@ use Illuminate\Database\Eloquent\Model;
 
 class Rating extends Model
 {
- protected $fillable = [
+    protected $fillable = [
         'user_id', 'project_id', 'rating'
     ];
 
+    /** Returns the user who submitted this rating. */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
+    /** Returns the project this rating applies to. */
     public function project()
     {
         return $this->belongsTo(Project::class);
     }
 
+    /** Scopes ratings to the authenticated user's university. */
     public function scopeForCurrentUniversity($query)
     {
         if (!auth()->check() || !auth()->user()->university_id) {

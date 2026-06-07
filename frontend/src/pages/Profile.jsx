@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
+import { rtlSafeGradientStyle } from "../utils/rtlSafeGradient";
 import toast from "react-hot-toast";
-
-// MUI
 import {
   Box,
   Paper,
@@ -22,9 +22,9 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
-
-// Icons
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
@@ -32,14 +32,18 @@ import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import BadgeRoundedIcon from "@mui/icons-material/BadgeRounded";
 import PhotoCameraRoundedIcon from "@mui/icons-material/PhotoCameraRounded";
-import GitHubIcon from "@mui/icons-material/GitHub";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import GitHubLinkCard from "../components/GitHubLinkCard";
+import { isGithubLinked } from "../utils/githubLink";
 
+/** User profile page with edit, password, and GitHub linking. */
 export default function Profile() {
+  const { t } = useLanguage();
   const { token, user, authHeaders, apiFetch, API_BASE_URL } = useAuth();
 
-  const role = (user?.role || "").toLowerCase(); // "student" / "admin" / "supervisor"
+  const role = (user?.role || "").toLowerCase();
   const isStudent = role === "student";
+  const isSupervisor = role === "supervisor";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,12 +56,11 @@ export default function Profile() {
     new_password_confirmation: "",
   });
   const [pwdSaving, setPwdSaving] = useState(false);
+  const [availabilitySaving, setAvailabilitySaving] = useState({});
 
-  // server data
   const [serverUser, setServerUser] = useState(null);
   const [profile, setProfile] = useState(null);
 
-  // form
   const [form, setForm] = useState({
     phone: "",
     avatar: "",
@@ -65,9 +68,11 @@ export default function Profile() {
     student_number: "",
   });
 
+  /** Returns a change handler that updates one form field by key. */
   const setField = (key) => (e) =>
     setForm((p) => ({ ...p, [key]: e.target.value }));
 
+  /** Loads the current user profile from the API. */
   const fetchProfile = async () => {
     setLoading(true);
     setError("");
@@ -78,7 +83,7 @@ export default function Profile() {
       });
 
       if (!res.ok) {
-        setError(data?.message || "تعذر جلب بيانات البروفايل");
+        setError(data?.message || t("profile.loadError"));
         setServerUser(null);
         setProfile(null);
         return;
@@ -96,7 +101,7 @@ export default function Profile() {
           data?.user?.student_number || p.student_number || "",
       });
     } catch {
-      setError("حدث خطأ في الاتصال بالسيرفر");
+      setError(t("common.serverError"));
     } finally {
       setLoading(false);
     }
@@ -107,6 +112,41 @@ export default function Profile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  /** Toggles supervisor availability for a specific university. */
+  const handleToggleAvailability = async (universityId, nextValue) => {
+    setAvailabilitySaving((prev) => ({ ...prev, [universityId]: true }));
+    try {
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/profile/supervisor-availability`,
+        {
+          method: "PUT",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            university_id: universityId,
+            accepting_supervision: nextValue,
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        toast.error(data?.message || t("profile.availabilityError"));
+        return;
+      }
+
+      setServerUser(data?.user || null);
+      toast.success(
+        nextValue
+          ? t("profile.availabilityOn")
+          : t("profile.availabilityOff"),
+      );
+    } catch {
+      toast.error(t("common.serverError"));
+    } finally {
+      setAvailabilitySaving((prev) => ({ ...prev, [universityId]: false }));
+    }
+  };
+
+  /** Discards edits and restores form values from saved profile. */
   const handleCancel = () => {
     setEditMode(false);
     const p = profile || {};
@@ -119,6 +159,7 @@ export default function Profile() {
     });
   };
 
+  /** Persists editable profile fields to the server. */
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -143,11 +184,11 @@ export default function Profile() {
           Object.values(data.errors)?.[0] &&
           Object.values(data.errors)?.[0]?.[0];
 
-        toast.error(firstError || data?.message || "تعذر حفظ البروفايل");
+        toast.error(firstError || data?.message || t("profile.saveError"));
         return;
       }
 
-      toast.success("تم حفظ البروفايل بنجاح ✅");
+      toast.success(t("profile.saved"));
       setProfile(data?.profile || null);
       setServerUser(data?.user || null);
 
@@ -161,18 +202,16 @@ export default function Profile() {
         student_number: p.student_number || "",
       });
     } catch {
-      toast.error("خطأ أثناء الاتصال بالسيرفر");
+      toast.error(t("common.serverError"));
     } finally {
       setSaving(false);
     }
   };
 
-  // =========================
-  // Github Unlink Logic
-  // =========================
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
 
+  /** Removes the linked GitHub account from the user profile. */
   const performUnlinkGithub = async () => {
     setConfirmOpen(false);
 
@@ -185,27 +224,58 @@ export default function Profile() {
       );
 
       if (!res.ok) {
-        toast.error(data?.message || "تعذر إلغاء الربط");
+        toast.error(data?.message || t("profile.unlinkError"));
         return;
       }
 
-      toast.success("تم إلغاء ربط حساب GitHub بنجاح ✅");
+      toast.success(t("profile.unlinkSuccess"));
       fetchProfile();
     } catch {
-      toast.error("حدث خطأ أثناء الاتصال بالسيرفر");
+      toast.error(t("common.serverError"));
     } finally {
       setUnlinking(false);
     }
   };
 
-  // UI
+  /** Submits the password change form to the API. */
+  const handleChangePassword = async () => {
+    try {
+      setPwdSaving(true);
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/profile/change-password`,
+        {
+          method: "PUT",
+          headers: authHeaders({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify(pwdForm),
+        },
+      );
+      if (!res.ok) {
+        throw new Error(
+          data?.message || t("profile.passwordChangeError"),
+        );
+      }
+      toast.success(t("profile.passwordUpdated"));
+      setPwdForm({
+        current_password: "",
+        new_password: "",
+        new_password_confirmation: "",
+      });
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setPwdSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ p: 4, display: "flex", justifyContent: "center" }}>
         <Stack alignItems="center" spacing={2}>
           <CircularProgress />
           <Typography color="text.secondary">
-            جارِ تحميل البروفايل...
+            {t("profile.loading")}
           </Typography>
         </Stack>
       </Box>
@@ -219,25 +289,22 @@ export default function Profile() {
           {error}
         </Alert>
         <Button variant="outlined" onClick={fetchProfile}>
-          إعادة المحاولة
+          {t("common.retry")}
         </Button>
       </Box>
     );
   }
 
   const displayName =
-    serverUser?.name || serverUser?.user?.name || user?.user?.name || "مستخدم";
+    serverUser?.name || serverUser?.user?.name || user?.user?.name || t("profile.userFallback");
   const displayEmail =
     serverUser?.email || serverUser?.user?.email || user?.user?.email || "—";
 
   const currentUserId = serverUser?.id || user?.user?.id;
-  const isGithubConnected = serverUser
-    ? !!serverUser.github_token
-    : !!user?.user?.github_token;
+  const isGithubConnected = isGithubLinked(user, serverUser);
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1100, mx: "auto" }}>
-      {/* Header */}
       <Paper
         elevation={0}
         sx={{
@@ -250,12 +317,13 @@ export default function Profile() {
         }}
       >
         <Box
+          style={rtlSafeGradientStyle(
+            "radial-gradient(900px 320px at 10% 10%, rgba(37,99,235,0.12), transparent 60%), radial-gradient(700px 320px at 85% 35%, rgba(17,24,39,0.10), transparent 60%)",
+          )}
           sx={{
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
-            background:
-              "radial-gradient(900px 320px at 10% 10%, rgba(37,99,235,0.12), transparent 60%), radial-gradient(700px 320px at 85% 35%, rgba(17,24,39,0.10), transparent 60%)",
           }}
         />
 
@@ -282,7 +350,7 @@ export default function Profile() {
 
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                الملف الشخصي
+                {t("profile.title")}
               </Typography>
               <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
                 {displayName} • {displayEmail}
@@ -295,14 +363,14 @@ export default function Profile() {
               >
                 <Chip
                   size="small"
-                  label={`Role: ${role || "—"}`}
+                  label={`${t("common.role")}: ${t(`roles.${role}`, role || "—")}`}
                   sx={{ bgcolor: "background.paper" }}
                 />
                 {isStudent && (
                   <Chip
                     size="small"
                     icon={<SchoolRoundedIcon />}
-                    label="Student fields enabled"
+                    label={t("profile.studentFieldsEnabled")}
                     variant="outlined"
                   />
                 )}
@@ -318,7 +386,7 @@ export default function Profile() {
                 onClick={() => setEditMode(true)}
                 sx={{ borderRadius: 2.5, fontWeight: 900 }}
               >
-                تعديل
+                {t("profile.edit")}
               </Button>
             ) : (
               <>
@@ -329,7 +397,7 @@ export default function Profile() {
                   disabled={saving}
                   sx={{ borderRadius: 2.5, fontWeight: 900 }}
                 >
-                  {saving ? "جاري الحفظ..." : "حفظ"}
+                  {saving ? t("profile.saving") : t("profile.save")}
                 </Button>
                 <Button
                   variant="outlined"
@@ -338,7 +406,7 @@ export default function Profile() {
                   disabled={saving}
                   sx={{ borderRadius: 2.5, fontWeight: 900 }}
                 >
-                  إلغاء
+                  {t("profile.cancel")}
                 </Button>
               </>
             )}
@@ -346,9 +414,7 @@ export default function Profile() {
         </Stack>
       </Paper>
 
-      {/* Content */}
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mt: 2 }}>
-        {/* Left card */}
         <Paper
           elevation={0}
           sx={{
@@ -365,41 +431,41 @@ export default function Profile() {
             alignItems="center"
             sx={{ mb: 1 }}
           >
-            <Typography sx={{ fontWeight: 900 }}>بيانات الحساب</Typography>
-            <Chip size="small" label={editMode ? "Edit mode" : "View mode"} />
+            <Typography sx={{ fontWeight: 900 }}>{t("profile.accountData")}</Typography>
+            <Chip size="small" label={editMode ? t("profile.editMode") : t("profile.viewMode")} />
           </Stack>
 
           <Divider sx={{ mb: 2 }} />
 
           <Stack spacing={2}>
             <TextField
-              label="الاسم"
+              label={t("profile.name")}
               value={displayName}
               disabled
-              helperText="الاسم يأتي من جدول المستخدمين (users)"
+              helperText={t("profile.nameHelper")}
             />
 
             <TextField
-              label="البريد الإلكتروني"
+              label={t("profile.email")}
               value={displayEmail}
               disabled
             />
 
             <TextField
-              label="رقم الهاتف (اختياري)"
+              label={t("profile.phone")}
               value={form.phone}
               onChange={setField("phone")}
               disabled={!editMode}
             />
 
             <TextField
-              label="رابط الصورة (Avatar URL) اختياري"
+              label={t("profile.avatarUrl")}
               value={form.avatar}
               onChange={setField("avatar")}
               disabled={!editMode}
               InputProps={{
                 endAdornment: (
-                  <Tooltip title="ضع رابط صورة (مثال: https://...)">
+                  <Tooltip title={t("profile.avatarTooltip")}>
                     <IconButton size="small">
                       <PhotoCameraRoundedIcon fontSize="small" />
                     </IconButton>
@@ -410,8 +476,17 @@ export default function Profile() {
           </Stack>
         </Paper>
 
-        {/* Right card */}
         <Stack spacing={2} sx={{ flex: 1 }}>
+          <GitHubLinkCard
+            variant="profile"
+            userId={currentUserId}
+            apiBaseUrl={API_BASE_URL}
+            linked={isGithubConnected}
+            returnTo="/dashboard/profile"
+            onUnlink={() => setConfirmOpen(true)}
+            unlinking={unlinking}
+          />
+
           <Paper
             elevation={0}
             sx={{
@@ -422,19 +497,95 @@ export default function Profile() {
             }}
           >
             <Typography sx={{ fontWeight: 900, mb: 1 }}>
-              معلومات إضافية
+              {t("profile.extraInfo")}
             </Typography>
 
             <Divider sx={{ my: 2 }} />
 
-            {!isStudent ? (
+            {isSupervisor ? (
+              <Stack spacing={1.5}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  {t("profile.supervisorUniversitiesHint")}
+                </Typography>
+                {(serverUser?.supervisor_memberships || []).length === 0 ? (
+                  <Alert severity="info">{t("profile.supervisorNoUniversities")}</Alert>
+                ) : (
+                  (serverUser?.supervisor_memberships || []).map((uni) => (
+                    <Stack
+                      key={uni.id}
+                      spacing={1}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        bgcolor: "background.default",
+                      }}
+                    >
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        justifyContent="space-between"
+                        spacing={1}
+                      >
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                          <SchoolRoundedIcon fontSize="small" color="action" />
+                          <Typography sx={{ fontWeight: 800 }} noWrap>
+                            {uni.name}
+                          </Typography>
+                        </Stack>
+                        <Chip
+                          size="small"
+                          color={
+                            uni.status === "active"
+                              ? "success"
+                              : uni.status === "rejected"
+                                ? "error"
+                                : "warning"
+                          }
+                          label={t(`users.status${uni.status === "active" ? "Active" : uni.status === "rejected" ? "Rejected" : "Pending"}`)}
+                          sx={{ fontWeight: 800, flexShrink: 0 }}
+                        />
+                      </Stack>
+                      {uni.status === "active" && (
+                        <FormControlLabel
+                          sx={{ m: 0, alignItems: "flex-start" }}
+                          control={
+                            <Switch
+                              size="small"
+                              checked={uni.accepting_supervision !== false}
+                              disabled={!!availabilitySaving[uni.id]}
+                              onChange={(_, checked) =>
+                                handleToggleAvailability(uni.id, checked)
+                              }
+                            />
+                          }
+                          label={
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                                {uni.accepting_supervision !== false
+                                  ? t("profile.availableForStudents")
+                                  : t("profile.unavailableForStudents")}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {t("profile.availabilityHint")}
+                              </Typography>
+                            </Box>
+                          }
+                        />
+                      )}
+                    </Stack>
+                  ))
+                )}
+              </Stack>
+            ) : !isStudent ? (
               <Alert severity="info">
-                لا توجد حقول خاصة لدورك حالياً (فقط الطالب لديه بيانات جامعية).
+                {t("profile.noRoleFields")}
               </Alert>
             ) : (
               <Stack spacing={2}>
                 <TextField
-                  label="اسم الجامعة"
+                  label={t("profile.universityName")}
                   value={form.university_name}
                   onChange={setField("university_name")}
                   disabled={!editMode}
@@ -448,10 +599,10 @@ export default function Profile() {
                 />
 
                 <TextField
-                  label="الرقم الجامعي"
+                  label={t("profile.studentNumber")}
                   value={form.student_number || serverUser?.student_number || ""}
                   disabled
-                  helperText="يُحدَّد عند التسجيل ولا يمكن تغييره من هنا"
+                  helperText={t("profile.studentNumberHelper")}
                   InputProps={{
                     startAdornment: (
                       <BadgeRoundedIcon
@@ -474,12 +625,12 @@ export default function Profile() {
             }}
           >
             <Typography sx={{ fontWeight: 900, mb: 1 }}>
-              تغيير كلمة المرور
+              {t("profile.changePassword")}
             </Typography>
             <Divider sx={{ my: 2 }} />
             <Stack spacing={2}>
               <TextField
-                label="كلمة المرور الحالية"
+                label={t("profile.currentPassword")}
                 type="password"
                 value={pwdForm.current_password}
                 onChange={(e) =>
@@ -490,7 +641,7 @@ export default function Profile() {
                 }
               />
               <TextField
-                label="كلمة المرور الجديدة"
+                label={t("profile.newPassword")}
                 type="password"
                 value={pwdForm.new_password}
                 onChange={(e) =>
@@ -498,7 +649,7 @@ export default function Profile() {
                 }
               />
               <TextField
-                label="تأكيد كلمة المرور الجديدة"
+                label={t("profile.confirmNewPassword")}
                 type="password"
                 value={pwdForm.new_password_confirmation}
                 onChange={(e) =>
@@ -511,119 +662,25 @@ export default function Profile() {
               <Button
                 variant="contained"
                 disabled={pwdSaving}
-                onClick={async () => {
-                  try {
-                    setPwdSaving(true);
-                    const { res, data } = await apiFetch(
-                      `${API_BASE_URL}/profile/change-password`,
-                      {
-                        method: "PUT",
-                        headers: authHeaders({
-                          "Content-Type": "application/json",
-                        }),
-                        body: JSON.stringify(pwdForm),
-                      },
-                    );
-                    if (!res.ok) {
-                      throw new Error(
-                        data?.message || "تعذر تغيير كلمة المرور",
-                      );
-                    }
-                    toast.success("تم تحديث كلمة المرور");
-                    setPwdForm({
-                      current_password: "",
-                      new_password: "",
-                      new_password_confirmation: "",
-                    });
-                  } catch (e) {
-                    toast.error(e.message);
-                  } finally {
-                    setPwdSaving(false);
-                  }
-                }}
+                onClick={handleChangePassword}
                 sx={{ fontWeight: 800, alignSelf: "flex-start" }}
               >
-                {pwdSaving ? "جاري الحفظ..." : "حفظ كلمة المرور"}
+                {pwdSaving ? t("profile.saving") : t("profile.savePassword")}
               </Button>
             </Stack>
-          </Paper>
-
-          {/* GitHub Connection */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.6,
-              borderRadius: 4,
-              border: "1px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Typography sx={{ fontWeight: 900, mb: 1 }}>
-              الحسابات المرتبطة
-            </Typography>
-            <Divider sx={{ my: 2 }} />
-
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              اربط حسابك بـ GitHub لتمكين ميزات الرفع التلقائي للإصدارات في
-              مشاريعك.
-            </Typography>
-
-            {!isGithubConnected ? (
-              <Button
-                variant="contained"
-                startIcon={<GitHubIcon />}
-                sx={{ bgcolor: "#24292e", "&:hover": { bgcolor: "#000" } }}
-                onClick={() => {
-                  window.location.href = `${API_BASE_URL}/auth/github/redirect?user_id=${currentUserId}`;
-                }}
-                fullWidth
-              >
-                ربط حسابي بـ GitHub
-              </Button>
-            ) : (
-              <Stack
-                direction="row"
-                spacing={2}
-                alignItems="center"
-                justifyContent="space-between"
-                flexWrap="wrap"
-                sx={{ width: "100%" }}
-              >
-                <Chip
-                  icon={<CheckCircleIcon />}
-                  label="حساب GitHub مرتبط"
-                  color="success"
-                  variant="outlined"
-                  sx={{ fontWeight: 700 }}
-                />
-
-                <Button
-                  variant="outlined"
-                  color="error"
-                  size="small"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={unlinking}
-                  sx={{ fontWeight: 700, borderRadius: 2 }}
-                >
-                  {unlinking ? "جاري الإلغاء..." : "إلغاء الربط"}
-                </Button>
-              </Stack>
-            )}
           </Paper>
         </Stack>
       </Stack>
 
-      {/* نافذة تأكيد الإلغاء */}
       <Dialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>تأكيد إلغاء الربط</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>{t("profile.unlinkTitle")}</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ fontWeight: 500 }}>
-            هل أنت متأكد أنك تريد إلغاء ربط حساب GitHub الخاص بك؟ ستتوقف ميزات
-            الرفع التلقائي للإصدارات الخاصة بمشاريعك.
+            {t("profile.unlinkContent")}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -632,7 +689,7 @@ export default function Profile() {
             color="inherit"
             sx={{ fontWeight: 700, borderRadius: 2 }}
           >
-            تراجع
+            {t("profile.unlinkBack")}
           </Button>
           <Button
             onClick={performUnlinkGithub}
@@ -641,7 +698,7 @@ export default function Profile() {
             sx={{ fontWeight: 700, borderRadius: 2 }}
             disableElevation
           >
-            نعم، إلغاء الربط
+            {t("profile.unlinkConfirm")}
           </Button>
         </DialogActions>
       </Dialog>

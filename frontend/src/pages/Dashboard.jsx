@@ -3,10 +3,9 @@ import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import PageHeader from "../components/PageHeader";
+import { headerActionBtnSx } from "../styles/dashboardUi";
+import { getRoleTheme } from "../config/roleTheme";
 import Swal from "sweetalert2";
-import toast from "react-hot-toast"; // 🎯 أضفنا هذا الاستيراد لإصلاح خطأ الـ toast في السطر 118
-
-// MUI
 import {
   Box,
   Paper,
@@ -25,8 +24,6 @@ import {
   TableRow,
   TableContainer,
 } from "@mui/material";
-
-// Icons
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
 import NotificationsRoundedIcon from "@mui/icons-material/NotificationsRounded";
@@ -36,8 +33,10 @@ import HourglassBottomRoundedIcon from "@mui/icons-material/HourglassBottomRound
 import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
 import AutoGraphRoundedIcon from "@mui/icons-material/AutoGraphRounded";
 import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
+import GitHubLinkCard from "../components/GitHubLinkCard";
+import { isGithubLinked } from "../utils/githubLink";
 
-// 🎯 تأثير التحويم الموحد للبطاقات
+/** Shared hover lift effect for dashboard cards. */
 const hoverEffect = {
   transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
   "&:hover": {
@@ -46,6 +45,7 @@ const hoverEffect = {
   },
 };
 
+/** Role-aware dashboard with stats, progress, and recent activity. */
 export default function Dashboard() {
   const { t } = useLanguage();
   const { user, token: ctxToken, authHeaders, apiFetch, API_BASE_URL } =
@@ -56,7 +56,7 @@ export default function Dashboard() {
 
   const name = user?.user?.name || t("common.user");
   const role = String(
-    user?.role?.name ?? user?.role ?? "غير معروف",
+    user?.role?.name ?? user?.role ?? t("common.unknown"),
   ).toLowerCase();
 
   const location = useLocation();
@@ -76,7 +76,7 @@ export default function Dashboard() {
       Swal.fire({ title: t("dashboard.githubError"), icon: "error" });
       window.history.replaceState(null, "", window.location.pathname);
     }
-  }, [location]);
+  }, [location, t]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -92,30 +92,30 @@ export default function Dashboard() {
   const [recentProjects, setRecentProjects] = useState([]);
   const [recentTasks, setRecentTasks] = useState([]);
 
+  /** Clamps a numeric value to a whole percentage between 0 and 100. */
   const safePercent = (n) => {
     const x = Number(n || 0);
     if (Number.isNaN(x)) return 0;
     return Math.max(0, Math.min(100, Math.round(x)));
   };
 
+  /** Renders the current user's role as a header chip. */
   const roleChip = () => (
     <Chip
       size="small"
-      color={
-        role === "admin"
-          ? "error"
-          : role === "supervisor"
-            ? "info"
-            : role === "student"
-              ? "success"
-              : "default"
-      }
       label={t(`roles.${role}`, role)}
       icon={role === "admin" ? <AdminPanelSettingsRoundedIcon /> : undefined}
-      sx={{ fontWeight: 800 }}
+      sx={{
+        fontWeight: 800,
+        color: "#FFFFFF",
+        bgcolor: "rgba(255,255,255,0.14)",
+        border: "1px solid rgba(255,255,255,0.35)",
+        "& .MuiChip-icon": { color: "#FFFFFF" },
+      }}
     />
   );
 
+  /** Maps a task/project status string to a colored chip. */
   const statusChip = (status) => {
     const s = (status || "pending").toLowerCase();
     if (s === "completed")
@@ -127,94 +127,13 @@ export default function Dashboard() {
     return <Chip size="small" variant="outlined" label={status || "—"} />;
   };
 
-  const sortByDateDesc = (arr) =>
-    [...arr].sort(
-      (a, b) =>
-        new Date(b.created_at || b.createdAt || 0) -
-        new Date(a.created_at || a.createdAt || 0),
-    );
-
-  const fetchProjects = async () => {
-    const { res, data } = await apiFetch(`${API_BASE_URL}/projects`, {
-      headers: authHeaders(),
-    });
-
-    if (res.status === 429) {
-      toast.error(
-        "ضغط كبير على السيرفر (Too Many Attempts). يرجى الانتظار ثوانٍ وتحديث الصفحة.",
-      );
-    }
-
-    if (!res.ok) throw new Error(data?.message || "تعذر جلب المشاريع");
-
-    const projectsArray = data?.projects?.data || data?.projects || [];
-    return Array.isArray(projectsArray) ? projectsArray : [];
-  };
-
-  const fetchProjectTasks = async (projectId) => {
-    const { res, data } = await apiFetch(
-      `${API_BASE_URL}/project/${projectId}/tasks`,
-      { headers: authHeaders() },
-    );
-    if (!res.ok) return [];
-    return data?.tasks || [];
-  };
-
-  const fetchPendingInvites = async () => {
-    try {
-      if (role === "supervisor") {
-        const { res, data } = await apiFetch(
-          `${API_BASE_URL}/supervisor/invitations`,
-          { headers: authHeaders() },
-        );
-        if (res.ok)
-          return Array.isArray(data?.invitations) ? data.invitations.length : 0;
-        return 0;
-      }
-
-      if (role === "student") {
-        const { res, data } = await apiFetch(
-          `${API_BASE_URL}/student/invitations`,
-          { headers: authHeaders() },
-        );
-        if (res.ok)
-          return Array.isArray(data?.invitations) ? data.invitations.length : 0;
-        return 0;
-      }
-
-      if (role === "admin") {
-        const [s1, s2] = await Promise.all([
-          apiFetch(`${API_BASE_URL}/supervisor/invitations`, {
-            headers: authHeaders(),
-          }),
-          apiFetch(`${API_BASE_URL}/student/invitations`, {
-            headers: authHeaders(),
-          }),
-        ]);
-
-        const c1 =
-          s1.res.ok && Array.isArray(s1.data?.invitations)
-            ? s1.data.invitations.length
-            : 0;
-        const c2 =
-          s2.res.ok && Array.isArray(s2.data?.invitations)
-            ? s2.data.invitations.length
-            : 0;
-        return c1 + c2;
-      }
-
-      return 0;
-    } catch {
-      return 0;
-    }
-  };
-
   useEffect(() => {
     if (!token) {
       navigate("/login");
       return;
     }
 
+    /** Fetches dashboard summary stats and recent lists from the API. */
     const run = async () => {
       try {
         setLoading(true);
@@ -305,6 +224,10 @@ export default function Dashboard() {
   );
 
   const currentConfig = dashboardConfig[role] || dashboardConfig.student;
+  const roleTheme = getRoleTheme(role);
+  const currentUserId = user?.user?.id || user?.id;
+  const githubLinked = isGithubLinked(user);
+  const showGithubSetup = (role === "student" || role === "supervisor") && !githubLinked;
 
   return (
     <Box sx={{ maxWidth: 1400, mx: "auto" }}>
@@ -312,21 +235,21 @@ export default function Dashboard() {
         title={t("dashboard.title")}
         subtitle={`${t("dashboard.welcome")} ${name} — ${currentConfig.greeting}`}
         icon={<DashboardRoundedIcon />}
+        roleName={role}
         actions={
-          <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1}
+            alignItems={{ xs: "stretch", sm: "center" }}
+            sx={{ width: { xs: "100%", sm: "auto" } }}
+          >
             {roleChip()}
             <Button
               component={RouterLink}
               to={currentConfig.action1.to}
-              variant="contained"
+              variant="outlined"
               startIcon={currentConfig.action1.icon}
-              sx={{
-                borderRadius: 2,
-                fontWeight: 800,
-                bgcolor: "white",
-                color: "#0B1220",
-                "&:hover": { bgcolor: "#F1F5F9" },
-              }}
+              sx={headerActionBtnSx}
             >
               {currentConfig.action1.label}
             </Button>
@@ -335,18 +258,23 @@ export default function Dashboard() {
               to={currentConfig.action2.to}
               variant="outlined"
               startIcon={currentConfig.action2.icon}
-              sx={{
-                borderRadius: 2,
-                fontWeight: 800,
-                color: "white",
-                borderColor: "rgba(255,255,255,0.4)",
-              }}
+              sx={headerActionBtnSx}
             >
               {currentConfig.action2.label}
             </Button>
           </Stack>
         }
       />
+
+      {showGithubSetup && (
+        <GitHubLinkCard
+          variant="dashboard"
+          userId={currentUserId}
+          apiBaseUrl={API_BASE_URL}
+          linked={githubLinked}
+          returnTo="/dashboard"
+        />
+      )}
 
       <Paper
         elevation={0}
@@ -359,7 +287,6 @@ export default function Dashboard() {
       >
         <Divider sx={{ display: "none" }} />
 
-        {/* 🎯 Progress Bar المطور */}
         {loading ? (
           <Stack direction="row" spacing={2} alignItems="center">
             <CircularProgress size={20} />
@@ -370,7 +297,18 @@ export default function Dashboard() {
         ) : error ? (
           <Alert severity="error">{error}</Alert>
         ) : (
-          <Box sx={{ p: 2, bgcolor: "rgba(0,0,0,0.02)", borderRadius: 2 }}>
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: (theme) =>
+                theme.palette.mode === "dark"
+                  ? "rgba(255,255,255,0.04)"
+                  : roleTheme.accentSoft,
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
             <Stack
               direction="row"
               justifyContent="space-between"
@@ -407,7 +345,6 @@ export default function Dashboard() {
         )}
       </Paper>
 
-      {/* 🎯 Stats Cards المتكيفة */}
       {!loading && !error && (
         <Stack
           direction={{ xs: "column", md: "row" }}
@@ -420,7 +357,7 @@ export default function Dashboard() {
               value: stats.projectsTotal,
               icon: <FolderOpenRoundedIcon fontSize="large" />,
               desc: currentConfig.projectsTitle,
-              color: "#3B82F6",
+              color: role === "student" ? roleTheme.accent : "#3B82F6",
             },
             {
               title: t("dashboard.tasks"),
@@ -441,7 +378,7 @@ export default function Dashboard() {
               value: stats.pendingInvites,
               icon: <HourglassBottomRoundedIcon fontSize="large" />,
               desc: currentConfig.invitesTitle,
-              color: "#F59E0B",
+              color: role === "admin" ? roleTheme.accent : "#F59E0B",
             },
           ].map((stat, idx) => (
             <Paper
@@ -451,18 +388,19 @@ export default function Dashboard() {
                 p: 3,
                 flex: 1,
                 borderRadius: 3,
-                border: "1px solid #EAEAEA",
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "background.paper",
                 position: "relative",
                 overflow: "hidden",
-                ...hoverEffect, // تطبيق تأثير النبض
+                ...hoverEffect,
               }}
             >
-              {/* لمسة لونية خفيفة في زاوية البطاقة */}
               <Box
                 sx={{
                   position: "absolute",
                   top: -15,
-                  left: -15,
+                  insetInlineStart: -15,
                   width: 60,
                   height: 60,
                   borderRadius: "50%",
@@ -503,21 +441,20 @@ export default function Dashboard() {
         </Stack>
       )}
 
-      {/* الجداول السفلية */}
       {!loading && !error && (
         <Stack
           direction={{ xs: "column", lg: "row" }}
           spacing={2}
           sx={{ mt: 3 }}
         >
-          {/* Recent Projects */}
           <Paper
             elevation={0}
             sx={{
               p: 0,
               flex: 1,
               borderRadius: 3,
-              border: "1px solid #EAEAEA",
+              border: "1px solid",
+              borderColor: "divider",
               overflow: "hidden",
               ...hoverEffect,
             }}
@@ -525,8 +462,12 @@ export default function Dashboard() {
             <Box
               sx={{
                 p: 2.5,
-                borderBottom: "1px solid #EAEAEA",
-                bgcolor: "#FAFAFA",
+                borderBottom: "1px solid",
+                borderColor: "divider",
+                bgcolor: (theme) =>
+                  theme.palette.mode === "dark"
+                    ? "rgba(255,255,255,0.03)"
+                    : "#FAFAFA",
               }}
             >
               <Stack
@@ -625,14 +566,14 @@ export default function Dashboard() {
             </Box>
           </Paper>
 
-          {/* Recent Tasks */}
           <Paper
             elevation={0}
             sx={{
               p: 0,
               flex: 1,
               borderRadius: 3,
-              border: "1px solid #EAEAEA",
+              border: "1px solid",
+              borderColor: "divider",
               overflow: "hidden",
               ...hoverEffect,
             }}
@@ -640,8 +581,12 @@ export default function Dashboard() {
             <Box
               sx={{
                 p: 2.5,
-                borderBottom: "1px solid #EAEAEA",
-                bgcolor: "#FAFAFA",
+                borderBottom: "1px solid",
+                borderColor: "divider",
+                bgcolor: (theme) =>
+                  theme.palette.mode === "dark"
+                    ? "rgba(255,255,255,0.03)"
+                    : "#FAFAFA",
               }}
             >
               <Typography sx={{ fontWeight: 900, fontSize: "1.1rem" }}>

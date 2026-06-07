@@ -6,6 +6,7 @@ use Illuminate\Notifications\DatabaseNotification;
 
 class NotificationRepository
 {
+    /** Get all notifications for the given user. */
     public function getAll($userId)
     {
         return DatabaseNotification::query()
@@ -15,6 +16,7 @@ class NotificationRepository
             ->get();
     }
 
+    /** Get unread notifications for the given user. */
     public function getUnread($userId)
     {
         return DatabaseNotification::query()
@@ -25,6 +27,7 @@ class NotificationRepository
             ->get();
     }
 
+    /** Mark a single notification as read for the given user. */
     public function markAsRead($notificationId, $userId)
     {
         $notification = DatabaseNotification::query()
@@ -39,6 +42,7 @@ class NotificationRepository
         return $notification;
     }
 
+    /** Mark all unread notifications as read for the given user. */
     public function markAllAsRead($userId)
     {
         return DatabaseNotification::query()
@@ -48,6 +52,7 @@ class NotificationRepository
             ->update(['read_at' => now()]);
     }
 
+    /** Delete a single notification for the given user. */
     public function delete($notificationId, $userId)
     {
         return DatabaseNotification::query()
@@ -57,6 +62,7 @@ class NotificationRepository
             ->delete();
     }
 
+    /** Delete all notifications for the given user. */
     public function deleteAll($userId)
     {
         return DatabaseNotification::query()

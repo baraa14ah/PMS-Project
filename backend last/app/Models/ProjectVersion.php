@@ -1,15 +1,14 @@
 <?php
 
 namespace App\Models;
+
 use App\Models\Task;
-
-
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ProjectVersion extends Model
 {
-        public $timestamps = true; // 🔥 مهم جداً
+    public $timestamps = true;
 
     protected $fillable = [
         'project_id',
@@ -25,21 +24,25 @@ class ProjectVersion extends Model
         'updated_at' => 'datetime',
     ];
 
+    /** Returns the project this version belongs to. */
     public function project()
     {
         return $this->belongsTo(Project::class);
     }
 
+    /** Returns the user who uploaded this version. */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
+    /** Returns the task linked to this version. */
     public function task()
     {
         return $this->belongsTo(Task::class);
     }
 
+    /** Scopes versions to the authenticated user's university. */
     public function scopeForCurrentUniversity($query)
     {
         if (!auth()->check() || !auth()->user()->university_id) {

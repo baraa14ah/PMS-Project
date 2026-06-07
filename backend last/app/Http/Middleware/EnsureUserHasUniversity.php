@@ -8,9 +8,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureUserHasUniversity
 {
-    /**
-     * Handle an incoming request.
-     */
+    /** Ensure the authenticated user belongs to a university. */
     public function handle(Request $request, Closure $next): Response
     {
         if ($request->user() && is_null($request->user()->university_id)) {

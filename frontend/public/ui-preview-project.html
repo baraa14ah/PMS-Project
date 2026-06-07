@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>معاينة واجهة صفحة المشروع</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;900&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: #F1F5F9;
+      color: #0F172A;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    h1 { font-size: 1.5rem; font-weight: 900; margin-bottom: 8px; }
+    .sub { color: #64748B; font-weight: 600; margin-bottom: 28px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    .card {
+      background: #fff;
+      border: 1px solid #E2E8F0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(15,23,42,0.06);
+    }
+    .card-top { height: 4px; }
+    .card-head { padding: 18px 20px 12px; display: flex; gap: 12px; align-items: flex-start; }
+    .icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: grid; place-items: center; font-size: 20px; flex-shrink: 0;
+    }
+    .title { font-weight: 900; font-size: 1.05rem; }
+    .desc { color: #64748B; font-size: 0.85rem; font-weight: 600; margin-top: 4px; }
+    .body { padding: 0 20px 20px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .chip {
+      padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 800;
+      border: 1px solid #CBD5E1; color: #475569; background: #fff;
+    }
+    .chip.on { background: #2563EB; color: #fff; border-color: #2563EB; }
+    .chip.warn { background: #FEE2E2; color: #B91C1C; border-color: #FECACA; }
+    .chat {
+      background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px;
+      min-height: 260px; display: flex; flex-direction: column;
+    }
+    .msgs { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .row { display: flex; gap: 8px; align-items: flex-end; }
+    .row.me { justify-content: flex-end; }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+      font-size: 0.75rem; font-weight: 900; color: #fff; flex-shrink: 0;
+    }
+    .bubble {
+      max-width: 78%; padding: 10px 14px; font-size: 0.88rem; font-weight: 600;
+      border: 1px solid #E2E8F0; background: #fff;
+    }
+    .bubble.them { border-radius: 14px 14px 14px 4px; }
+    .bubble.me { border-radius: 14px 14px 4px 14px; background: #EFF6FF; border-color: #BFDBFE; }
+    .composer {
+      border-top: 1px solid #E2E8F0; padding: 12px; display: flex; gap: 8px; background: #fff;
+    }
+    .composer input {
+      flex: 1; border: 1px solid #CBD5E1; border-radius: 10px; padding: 10px 12px; font-family: inherit;
+    }
+    .composer button {
+      background: #2563EB; color: #fff; border: 0; border-radius: 10px; padding: 10px 16px;
+      font-family: inherit; font-weight: 800; cursor: pointer;
+    }
+    .kanban { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .col {
+      background: #FDFDFD; border: 1px solid #E2E8F0; border-radius: 18px; padding: 10px;
+      border-top: 5px solid;
+    }
+    .col h4 { font-size: 0.82rem; font-weight: 900; margin-bottom: 8px; }
+    .task {
+      background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; padding: 8px 10px;
+      font-size: 0.78rem; font-weight: 700; margin-bottom: 6px;
+    }
+    .task.late { border-color: #FECACA; color: #B91C1C; }
+    .timeline-item {
+      border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 8px;
+      border-inline-start: 4px solid #0F766E;
+    }
+    .skeleton-header {
+      border-radius: 16px; overflow: hidden; border: 1px solid #E2E8F0; margin-bottom: 20px;
+    }
+    .sk-grad { background: linear-gradient(135deg, #2563EB, #7C3AED); padding: 24px; }
+    .sk-line { height: 14px; border-radius: 8px; background: rgba(255,255,255,0.25); margin-bottom: 10px; }
+    .sk-tabs { background: #fff; padding: 14px 20px; display: flex; gap: 16px; }
+    .sk-tab { width: 80px; height: 12px; border-radius: 6px; background: #E2E8F0; }
+    .badge { margin-inline-start: auto; font-size: 0.75rem; font-weight: 800; padding: 6px 10px; border-radius: 999px; background: #F1F5F9; }
+  </style>
+</head>
+<body>
+  <h1>معاينة التحسينات — صفحة المشروع</h1>
+  <p class="sub">افتح: <strong>http://localhost:5174/ui-preview-project.html</strong> (أو المنفذ الذي يعمل عليه Vite)</p>
+
+  <div class="skeleton-header">
+    <div class="sk-grad">
+      <div class="sk-line" style="width:55%; height:22px;"></div>
+      <div style="display:flex; gap:8px;">
+        <div class="sk-line" style="width:90px; margin:0;"></div>
+        <div class="sk-line" style="width:120px; margin:0;"></div>
+        <div class="sk-line" style="width:80px; margin:0;"></div>
+      </div>
+    </div>
+    <div class="sk-tabs">
+      <div class="sk-tab"></div><div class="sk-tab"></div><div class="sk-tab"></div><div class="sk-tab"></div><div class="sk-tab"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <div class="card-top" style="background:#8B5CF6"></div>
+      <div class="card-head">
+        <div class="icon" style="background:#F3E8FF;color:#8B5CF6">💬</div>
+        <div>
+          <div class="title">التعليقات — فقاعات محادثة</div>
+          <div class="desc">رسائلك على اليمين، باقي الفريق على اليسار + مربع إرسال ثابت بالأسفل</div>
+        </div>
+        <span class="badge">4 تعليقات</span>
+      </div>
+      <div class="body">
+        <div class="chat">
+          <div class="msgs">
+            <div class="row">
+              <div class="avatar" style="background:#2563EB">م</div>
+              <div class="bubble them">مرحباً، هل انتهيتم من واجهة تسجيل الدخول؟</div>
+            </div>
+            <div class="row me">
+              <div class="bubble me">نعم، بقي فقط ربط GitHub واختبار RTL.</div>
+              <div class="avatar" style="background:#7C3AED">أ</div>
+            </div>
+            <div class="row">
+              <div class="avatar" style="background:#0EA5E9">د</div>
+              <div class="bubble them">ممتاز — أرفعوا إصدار v0.2 اليوم.</div>
+            </div>
+          </div>
+          <div class="composer">
+            <input placeholder="اكتب تعليقك" />
+            <button>إرسال</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-top" style="background:#3B82F6"></div>
+      <div class="card-head">
+        <div class="icon" style="background:#DBEAFE;color:#2563EB">✓</div>
+        <div>
+          <div class="title">المهام — فلتر سريع + متأخرة</div>
+          <div class="desc">شريحة «متأخرة» تظهر بعدد المهام الفائتة موعدها</div>
+        </div>
+        <span class="badge warn">2 مهمة متأخرة</span>
+      </div>
+      <div class="body">
+        <div class="chips">
+          <span class="chip on">الكل</span>
+          <span class="chip warn">متأخرة (2)</span>
+          <span class="chip">قيد الانتظار</span>
+          <span class="chip">قيد التنفيذ</span>
+          <span class="chip">مكتملة</span>
+        </div>
+        <div class="kanban">
+          <div class="col" style="border-top-color:#F59E0B">
+            <h4>قيد الانتظار</h4>
+            <div class="task late">تصميم قاعدة البيانات</div>
+          </div>
+          <div class="col" style="border-top-color:#3B82F6">
+            <h4>قيد التنفيذ</h4>
+            <div class="task">واجهة المشروع</div>
+          </div>
+          <div class="col" style="border-top-color:#10B981">
+            <h4>مكتملة</h4>
+            <div class="task">تسجيل الدخول</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="grid-column: 1 / -1;">
+      <div class="card-top" style="background:#0F766E"></div>
+      <div class="card-head">
+        <div class="icon" style="background:#CCFBF1;color:#0F766E">🕘</div>
+        <div>
+          <div class="title">سجل النشاطات — فلتر حسب النوع</div>
+          <div class="desc">المهام · الإصدارات · الفريق (انضمام/إشراف)</div>
+        </div>
+        <span class="badge">12 نشاط</span>
+      </div>
+      <div class="body">
+        <div class="chips">
+          <span class="chip on">الكل (12)</span>
+          <span class="chip">المهام (6)</span>
+          <span class="chip">الإصدارات (3)</span>
+          <span class="chip">الفريق (3)</span>
+        </div>
+        <div class="timeline-item">أضاف مهمة جديدة: «واجهة المشروع» — بواسطة أحمد · 10:32 ص</div>
+        <div class="timeline-item" style="border-inline-start-color:#F59E0B">رفع إصداراً جديداً: v0.2 — بواسطة سارة · 09:15 ص</div>
+        <div class="timeline-item" style="border-inline-start-color:#8B5CF6">انضم إلى المشروع كمشرف — بواسطة د. محمد · أمس</div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

@@ -12,14 +12,13 @@ class CommentService
 {
     protected NotificationService $notifications;
 
+    /** Injects the notification service dependency. */
     public function __construct(NotificationService $notifications)
     {
         $this->notifications = $notifications;
     }
 
-    /**
-     * جلب تعليقات المشروع
-     */
+    /** Returns all comments for a project ordered by newest first. */
     public function getProjectComments($projectId)
     {
         return Comment::query()->forCurrentUniversity()
@@ -29,9 +28,7 @@ class CommentService
             ->get();
     }
 
-    /**
-     * جلب تعليقات المهمة
-     */
+    /** Returns all comments for a task ordered by newest first. */
     public function getTaskComments($taskId)
     {
         return Comment::query()->forCurrentUniversity()
@@ -41,9 +38,7 @@ class CommentService
             ->get();
     }
 
-    /**
-     * إضافة تعليق لمشروع مع إرسال إشعار
-     */
+    /** Adds a comment to a project and notifies participants. */
     public function addProjectComment($projectId, $commentText, $user)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -55,7 +50,6 @@ class CommentService
             'comment'    => $commentText,
         ]);
 
-        // ✅ إرسال الإشعار من داخل السيرفيس
         $this->notifications->notifyProjectParticipants(
             projectId: (int)$projectId,
             actorUserId: (int)$user->id,
@@ -65,16 +59,16 @@ class CommentService
             data: [
                 'project_id' => (int)$projectId,
                 'comment_id' => (int)$comment->id,
-                'url'        => "/dashboard/projects/{$projectId}",
-            ]
+                'url' => "/dashboard/projects/{$projectId}",
+                'actor_name' => $user->name,
+                'project_title' => $project->title,
+            ],
         );
 
         return $comment->load('user:id,name');
     }
 
-    /**
-     * إضافة تعليق لمهمة مع إرسال إشعار
-     */
+    /** Adds a comment to a task and notifies project participants. */
     public function addTaskComment($taskId, $commentText, $user)
     {
         $task = Task::query()->whereKey($taskId)->first();
@@ -96,9 +90,12 @@ class CommentService
                 body: "{$user->name} أضاف تعليقًا على المهمة: {$task->title}",
                 data: [
                     'project_id' => $projectId,
-                    'task_id'    => (int)$taskId,
+                    'task_id' => (int)$taskId,
                     'comment_id' => (int)$comment->id,
-                    'url'        => "/dashboard/projects/{$projectId}",
+                    'url' => "/dashboard/projects/{$projectId}",
+                    'actor_name' => $user->name,
+                    'task_title' => $task->title,
+                    'project_title' => $project?->title,
                 ],
                 ignoreUserId: $user->id
             );
@@ -107,9 +104,7 @@ class CommentService
         return $comment->load('user:id,name');
     }
 
-    /**
-     * تحديث تعليق
-     */
+    /** Updates a comment if the user is the author. */
     public function updateComment($id, $commentText, $user)
     {
         $comment = Comment::query()->forCurrentUniversity()->whereKey($id)->first();
@@ -123,9 +118,7 @@ class CommentService
         return ['status' => 200, 'comment' => $comment->load('user:id,name')];
     }
 
-    /**
-     * حذف تعليق
-     */
+    /** Deletes a comment if the user is the author. */
     public function deleteComment($id, $user)
     {
         $comment = Comment::query()->forCurrentUniversity()->whereKey($id)->first();

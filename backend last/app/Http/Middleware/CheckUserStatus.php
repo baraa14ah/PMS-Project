@@ -8,11 +8,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CheckUserStatus
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     */
+    /** Reject requests from inactive, pending, or rejected users. */
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();

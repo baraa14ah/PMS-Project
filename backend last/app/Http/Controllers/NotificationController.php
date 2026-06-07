@@ -9,48 +9,41 @@ class NotificationController extends Controller
 {
     protected NotificationService $service;
 
+    /** Initialize the controller with notification service dependency. */
     public function __construct(NotificationService $service)
     {
         $this->service = $service;
     }
 
-    /**
-     * قائمة الإشعارات
-     */
+    /** List notifications for the authenticated user. */
     public function index(Request $request)
     {
         $result = $this->service->getAll($request->user());
         return response()->json($result);
     }
 
-  
- /**
-     * تحديد إشعار واحد كـ "مقروء"
-     */
+    /** Mark a single notification as read. */
     public function markAsRead(Request $request, $id)
     {
-        // استدعاء السيرفيس لتحديث إشعار واحد فوراً وبدون تعقيد
         $this->service->markAsRead($request->user(), $id);
-        
+
         return response()->json([
             'message' => 'تم تحديد الإشعار كمقروء'
         ]);
     }
 
-    /**
-     * تحديد كل الإشعارات كمقروءة
-     */
+    /** Mark all notifications as read. */
     public function markAllAsRead(Request $request)
     {
-        // استدعاء السيرفيس بدون تمرير ID لتحديث الكل
         $result = $this->service->markAsRead($request->user());
-        
+
         return response()->json([
             'message' => 'All notifications marked as read successfully',
             'unread_count' => $result['unread_count']
         ]);
     }
-   
+
+    /** Delete a single notification. */
     public function delete(Request $request, $id)
     {
         $notification = $request->user()->notifications()->where('id', $id)->first();
@@ -59,12 +52,12 @@ class NotificationController extends Controller
         $notification->delete();
         return response()->json(['message' => 'Deleted successfully']);
     }
-   
+
+    /** Delete all notifications for the authenticated user. */
     public function deleteAll(Request $request)
     {
-      
         $request->user()->notifications()->delete();
-        
+
         return response()->json([
             'message' => 'All notifications deleted successfully'
         ]);

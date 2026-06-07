@@ -24,6 +24,7 @@ import {
   formatNotificationTime,
 } from "../utils/notifications";
 
+/** Header bell menu that lists recent notifications and unread counts. */
 export default function NotificationBellMenu({
   token,
   authHeaders,
@@ -33,13 +34,14 @@ export default function NotificationBellMenu({
   setUnreadCount,
 }) {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [items, setItems] = useState([]);
 
+  /** Loads the latest notifications when the dropdown opens. */
   const fetchLatest = async () => {
     if (!token) return;
     setLoading(true);
@@ -49,7 +51,7 @@ export default function NotificationBellMenu({
         headers: authHeaders(),
       });
       if (!res.ok) {
-        setError(data?.message || "تعذر جلب الإشعارات");
+        setError(data?.message || t("notifications.loadError"));
         setItems([]);
         return;
       }
@@ -59,7 +61,7 @@ export default function NotificationBellMenu({
         setUnreadCount(Number(data.unread_count) || 0);
       }
     } catch {
-      setError("خطأ في الاتصال");
+      setError(t("notifications.connectionError"));
       setItems([]);
     } finally {
       setLoading(false);
@@ -71,9 +73,12 @@ export default function NotificationBellMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, token]);
 
+  /** Opens the notification dropdown menu. */
   const handleOpen = (e) => setAnchorEl(e.currentTarget);
+  /** Closes the notification dropdown menu. */
   const handleClose = () => setAnchorEl(null);
 
+  /** Marks every notification as read locally and on the server. */
   const markAllRead = async () => {
     setUnreadCount(0);
     setItems((prev) =>
@@ -92,6 +97,7 @@ export default function NotificationBellMenu({
     }
   };
 
+  /** Marks a notification read and navigates to its target URL. */
   const handleClick = async (n) => {
     handleClose();
     const url = resolveNotificationUrl(n);
@@ -119,7 +125,7 @@ export default function NotificationBellMenu({
   return (
     <>
       <Tooltip title={t("nav.notifications")}>
-        <IconButton onClick={handleOpen} aria-label="الإشعارات">
+        <IconButton onClick={handleOpen} aria-label={t("notifications.title")}>
           <Badge color="error" badgeContent={unreadCount} max={99}>
             <NotificationsRoundedIcon />
           </Badge>
@@ -208,8 +214,8 @@ export default function NotificationBellMenu({
         {!loading &&
           !error &&
           items.map((n) => {
-            const { type, title, body } = parseNotification(n);
-            const meta = getNotificationMeta(type);
+            const { type, title, body } = parseNotification(n, t);
+            const meta = getNotificationMeta(type, t);
             const Icon = meta.icon;
             const isUnread = !n.read_at;
 
@@ -257,7 +263,7 @@ export default function NotificationBellMenu({
                       color="text.secondary"
                       sx={{ flexShrink: 0 }}
                     >
-                      {formatNotificationTime(n.created_at)}
+                      {formatNotificationTime(n.created_at, t, lang)}
                     </Typography>
                   </Stack>
                   {body ? (

@@ -1,6 +1,5 @@
 <?php
 
-// app/Models/GitCommit.php
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -17,13 +16,19 @@ class GitCommit extends Model
         'message',
         'committed_at',
         'url',
-      ];
+    ];
 
+    protected $casts = [
+        'committed_at' => 'datetime',
+    ];
+
+    /** Returns the project this commit belongs to. */
     public function project()
     {
         return $this->belongsTo(Project::class);
     }
 
+    /** Scopes commits to the authenticated user's university. */
     public function scopeForCurrentUniversity($query)
     {
         if (!auth()->check() || !auth()->user()->university_id) {
@@ -34,11 +39,4 @@ class GitCommit extends Model
             $q->where('university_id', auth()->user()->university_id);
         });
     }
-      
-    
-
-    protected $casts = [
-        'committed_at' => 'datetime',
-    ];
 }
-

@@ -12,32 +12,31 @@ class ProjectController extends Controller
     protected ProjectService $projectService;
     protected GithubService $githubService;
 
+    /** Initialize the controller with project and GitHub services. */
     public function __construct(ProjectService $projectService, GithubService $githubService)
     {
         $this->projectService = $projectService;
         $this->githubService = $githubService;
     }
 
-    // 1. عرض جميع المشاريع
-  // 1. عرض جميع المشاريع (تم برمجتها لتناسب جميع الصلاحيات مباشرة)
-  public function index(Request $request)
-  {
-      $user = $request->user();
-      $user->loadMissing('role');
+    /** List projects visible to the authenticated user. */
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        $user->loadMissing('role');
 
-      $projects = $this->projectService->listForIndex($user);
+        $projects = $this->projectService->listForIndex($user);
 
-      return response()->json(['projects' => $projects]);
-  }
+        return response()->json(['projects' => $projects]);
+    }
 
-    // 2. عرض تفاصيل مشروع محدد
+    /** Return full details and stats for a project. */
     public function show(Request $request, $id)
     {
         $project = $this->projectService->getProjectFullDetails((int)$id);
-        
+
         if (!$project) return response()->json(['message' => 'Project not found'], 404);
 
-        // حساب التقدم ودمجه في الرد
         $stats = $this->projectService->calculateProgress((int)$id);
 
         return response()->json([
@@ -46,19 +45,18 @@ class ProjectController extends Controller
         ]);
     }
 
-    // 3. ✅ دالة الإنشاء المفقودة (Create)
+    /** Create a new project. */
     public function create(Request $request)
     {
-        // السيرفيس يقوم بالتحقق (Validation) وإنشاء المشروع
         $project = $this->projectService->create($request);
-        
+
         return response()->json([
-            'message' => 'تم إنشاء المشروع بنجاح', 
+            'message' => 'تم إنشاء المشروع بنجاح',
             'project' => $project
         ], 201);
     }
 
-    // 4. ✅ دالة التعديل المفقودة (Update)
+    /** Update an existing project. */
     public function update(Request $request, $id)
     {
         $result = $this->projectService->update($request, (int)$id, $request->user());
@@ -66,18 +64,18 @@ class ProjectController extends Controller
         if ($result === 'unauthorized') {
             return response()->json(['message' => 'غير مصرح لك بتعديل هذا المشروع'], 403);
         }
-        
+
         if (!$result) {
             return response()->json(['message' => 'المشروع غير موجود'], 404);
         }
 
         return response()->json([
-            'message' => 'تم تعديل المشروع بنجاح', 
+            'message' => 'تم تعديل المشروع بنجاح',
             'project' => $result
         ]);
     }
 
-    // 5. ✅ دالة الحذف المفقودة (Delete)
+    /** Delete a project. */
     public function delete(Request $request, $id)
     {
         $result = $this->projectService->delete((int)$id, $request->user());
@@ -85,7 +83,7 @@ class ProjectController extends Controller
         if ($result === 'unauthorized') {
             return response()->json(['message' => 'غير مصرح لك بحذف هذا المشروع'], 403);
         }
-        
+
         if (!$result) {
             return response()->json(['message' => 'المشروع غير موجود'], 404);
         }
@@ -93,30 +91,30 @@ class ProjectController extends Controller
         return response()->json(['message' => 'تم حذف المشروع بنجاح']);
     }
 
-    // (دعم إضافي) في حال كان مسار الـ Route لديك يطلب دالة باسم destroy بدلاً من delete
+    /** Route alias that delegates to delete. */
     public function destroy(Request $request, $id)
     {
         return $this->delete($request, $id);
     }
-    // دالة إلغاء الإشراف على المشروع
+
+    /** Remove the current supervisor from a project. */
     public function leaveSupervision(Request $request, $id)
     {
         $project = \App\Models\Project::query()->whereKey($id)->firstOrFail();
 
-        // التأكد من أن من يطلب الإلغاء هو مشرف المشروع نفسه
         $user = $request->user();
 
         if ($project->supervisor_id !== $user->id) {
             return response()->json(['message' => 'غير مصرح لك بإلغاء الإشراف'], 403);
         }
 
-        // إزالة المشرف من المشروع
         $project->supervisor_id = null;
         $project->save();
 
         return response()->json(['message' => 'تم إلغاء الإشراف بنجاح']);
     }
-    // ✅ دالة جلب نسبة التقدم (لحل خطأ 500)
+
+    /** Return task progress stats for a project. */
     public function progress(Request $request, $id)
     {
         $stats = $this->projectService->calculateProgress((int)$id);
@@ -126,13 +124,9 @@ class ProjectController extends Controller
         return response()->json($stats);
     }
 
-
-  /**
-     * عرض قائمة الطلاب المتاحين للدعوة
-     */
+    /** List students available for project invitation. */
     public function students(Request $request, int $id)
     {
-        // استدعاء السيرفيس للقيام بالعمل الشاق
         $students = $this->projectService->getAvailableStudentsForInvite(
             $id,
             $request->get('search'),
@@ -140,6 +134,8 @@ class ProjectController extends Controller
 
         return response()->json(['students' => $students]);
     }
+
+    /** Return activity log entries for a project. */
     public function getActivities($id)
     {
         $project = \App\Models\Project::query()->whereKey($id)->first();

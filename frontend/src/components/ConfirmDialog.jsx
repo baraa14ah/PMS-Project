@@ -7,18 +7,22 @@ import {
   DialogActions,
   Button,
 } from "@mui/material";
+import { useLanguage } from "../context/LanguageContext";
 
+/** Modal dialog that confirms a destructive or important action. */
 export default function ConfirmDialog({
   open,
   title,
   content,
   onConfirm,
   onClose,
-  confirmText = "تأكيد", // قيمة افتراضية
-  cancelText = "إلغاء", // قيمة افتراضية
-  confirmColor = "error", // اللون الافتراضي أحمر للتحذير
-  loading = false, // لتغيير حالة الزر أثناء التحميل
+  confirmText,
+  cancelText,
+  confirmColor = "error",
+  loading = false,
 }) {
+  const { t } = useLanguage();
+
   return (
     <Dialog
       open={open}
@@ -42,7 +46,7 @@ export default function ConfirmDialog({
           disabled={loading}
           sx={{ fontWeight: 700, borderRadius: 2 }}
         >
-          {cancelText}
+          {cancelText || t("common.cancel")}
         </Button>
         <Button
           onClick={onConfirm}
@@ -52,7 +56,7 @@ export default function ConfirmDialog({
           sx={{ fontWeight: 700, borderRadius: 2 }}
           disableElevation
         >
-          {loading ? "جاري التنفيذ..." : confirmText}
+          {loading ? t("common.executing") : confirmText || t("common.confirm")}
         </Button>
       </DialogActions>
     </Dialog>

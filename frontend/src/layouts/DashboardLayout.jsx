@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useThemeMode } from "../context/ThemeContext";
@@ -8,7 +8,9 @@ import NotificationBellMenu from "../components/NotificationBellMenu";
 import BrandLogo from "../components/BrandLogo";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { getNavForRole } from "../config/navConfig";
+import { getRoleTheme } from "../config/roleTheme";
 import { brandColors } from "../theme";
+import { rtlSafeGradientStyle } from "../utils/rtlSafeGradient";
 
 import {
   Box,
@@ -29,6 +31,7 @@ import {
   Tooltip,
   Chip,
   alpha,
+  CircularProgress,
 } from "@mui/material";
 
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
@@ -38,6 +41,7 @@ import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 
 const drawerWidth = 268;
 
+/** Main dashboard shell with sidebar navigation, badges, and content outlet. */
 export default function DashboardLayout() {
   const {
     user,
@@ -61,6 +65,7 @@ export default function DashboardLayout() {
 
   const displayName = user?.user?.name || user?.name || "User";
   const roleLabel = t(`roles.${roleName}`, roleName);
+  const roleTheme = getRoleTheme(roleName);
 
   const workspaceLabel = isSuperAdmin
     ? t("common.platformAdmin")
@@ -71,6 +76,7 @@ export default function DashboardLayout() {
   const [studentInvCount, setStudentInvCount] = useState(0);
   const [supervisorInvCount, setSupervisorInvCount] = useState(0);
   const [passwordResetCount, setPasswordResetCount] = useState(0);
+  const [pendingUsersCount, setPendingUsersCount] = useState(0);
 
   const badges = useMemo(
     () => ({
@@ -78,48 +84,85 @@ export default function DashboardLayout() {
       supervisorInv: supervisorInvCount,
       studentInv: studentInvCount,
       passwordReset: passwordResetCount,
+      pendingUsers: pendingUsersCount,
+      usersAlerts: pendingUsersCount + passwordResetCount,
     }),
-    [unreadCount, supervisorInvCount, studentInvCount, passwordResetCount],
+    [
+      unreadCount,
+      supervisorInvCount,
+      studentInvCount,
+      passwordResetCount,
+      pendingUsersCount,
+    ],
   );
 
-  const navItems = useMemo(() => getNavForRole(roleName), [roleName]);
+  const navItems = getNavForRole(roleName);
 
-  const fetchBadges = async () => {
-    if (!token) return;
-    try {
-      const notifRes = await apiFetch(`${API_BASE_URL}/notifications`, {
-        headers: authHeaders(),
-      });
-      if (notifRes.res.ok) {
-        setUnreadCount(Number(notifRes.data?.unread_count) || 0);
+  const badgesFetchedAt = useRef(0);
+  const BADGE_TTL_MS = 45_000;
+
+  /** Fetches notification and sidebar badge counts with TTL caching. */
+  const fetchBadges = useCallback(
+    async (force = false) => {
+      if (!token) return;
+      const now = Date.now();
+      if (!force && now - badgesFetchedAt.current < BADGE_TTL_MS) return;
+
+      try {
+        const notifRes = await apiFetch(`${API_BASE_URL}/notifications`, {
+          headers: authHeaders(),
+        });
+        if (notifRes.res.ok) {
+          setUnreadCount(Number(notifRes.data?.unread_count) || 0);
+        }
+        if (!isSuperAdmin) {
+          const { res, data } = await apiFetch(`${API_BASE_URL}/dashboard/badges`, {
+            headers: authHeaders(),
+          });
+          if (res.ok) {
+            setStudentInvCount(Number(data?.student_invitations) || 0);
+            setSupervisorInvCount(Number(data?.supervisor_invitations) || 0);
+            setPasswordResetCount(Number(data?.password_reset_requests) || 0);
+            setPendingUsersCount(Number(data?.pending_users) || 0);
+          }
+        }
+        badgesFetchedAt.current = Date.now();
+      } catch (e) {
+        console.error("badges", e);
       }
-      if (isSuperAdmin) return;
-      const { res, data } = await apiFetch(`${API_BASE_URL}/dashboard/badges`, {
-        headers: authHeaders(),
-      });
-      if (!res.ok) return;
-      setStudentInvCount(Number(data?.student_invitations) || 0);
-      setSupervisorInvCount(Number(data?.supervisor_invitations) || 0);
-      setPasswordResetCount(Number(data?.password_reset_requests) || 0);
-    } catch (e) {
-      console.error("badges", e);
-    }
-  };
+    },
+    [
+      API_BASE_URL,
+      apiFetch,
+      authHeaders,
+      isSuperAdmin,
+      token,
+      setUnreadCount,
+      setStudentInvCount,
+      setSupervisorInvCount,
+      setPasswordResetCount,
+      setPendingUsersCount,
+    ],
+  );
 
   useEffect(() => {
     if (!token) return;
-    fetchBadges();
-    const onUpdate = () => fetchBadges();
+    const timer = window.setTimeout(() => fetchBadges(true), 0);
+    const onUpdate = () => fetchBadges(true);
     window.addEventListener("updateSidebarBadges", onUpdate);
-    return () => window.removeEventListener("updateSidebarBadges", onUpdate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, isSuperAdmin]);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("updateSidebarBadges", onUpdate);
+    };
+  }, [token, fetchBadges]);
 
+  /** Returns the badge count for a nav item, if configured. */
   const resolveBadge = (item) => {
     if (!item.badgeKey) return 0;
     return badges[item.badgeKey] ?? 0;
   };
 
+  /** Determines whether a nav item matches the current route. */
   const isActive = (item) => {
     if (item.end) {
       return (
@@ -132,6 +175,7 @@ export default function DashboardLayout() {
     );
   };
 
+  /** Clears the user menu and signs the user out. */
   const handleLogout = () => {
     setAnchorEl(null);
     logout();
@@ -157,15 +201,15 @@ export default function DashboardLayout() {
         }}
       >
         <Box
+          style={rtlSafeGradientStyle(roleTheme.gradient)}
           sx={{
             px: 2,
             py: 2,
-            background: `linear-gradient(180deg, ${brandColors.navy} 0%, #1E3A5F 100%)`,
             color: "white",
           }}
         >
           <Stack direction="row" alignItems="center" spacing={1.2}>
-            <BrandLogo size="sm" variant="hero" />
+            <BrandLogo size="sm" variant="role" roleName={roleName} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ fontWeight: 950, lineHeight: 1.1 }}>
                 {t("common.appName")}
@@ -183,8 +227,9 @@ export default function DashboardLayout() {
               sx={{
                 width: 40,
                 height: 40,
-                bgcolor: brandColors.blue,
+                bgcolor: roleTheme.accent,
                 fontWeight: 900,
+                boxShadow: `0 0 0 2px ${roleTheme.accentSoft}`,
               }}
             >
               {(displayName?.[0] || "U").toUpperCase()}
@@ -243,8 +288,9 @@ export default function DashboardLayout() {
                   mb: 0.5,
                   py: 1,
                   "&.Mui-selected": {
-                    bgcolor: alpha(brandColors.blue, 0.12),
-                    borderInlineStart: `3px solid ${brandColors.blue}`,
+                    bgcolor: alpha(roleTheme.accent, 0.14),
+                    borderInlineStart: `3px solid ${roleTheme.accent}`,
+                    "& .MuiListItemIcon-root": { color: roleTheme.accent },
                   },
                 }}
               >
@@ -364,7 +410,18 @@ export default function DashboardLayout() {
         </Box>
 
         <SystemBreadcrumbs />
-        <Outlet context={{ unreadCount, setUnreadCount }} />
+        <Suspense
+          fallback={
+            <Box sx={{ py: 10, textAlign: "center" }}>
+              <CircularProgress size={32} />
+              <Typography sx={{ mt: 2, fontWeight: 700, color: "text.secondary" }}>
+                {t("common.loading")}
+              </Typography>
+            </Box>
+          }
+        >
+          <Outlet context={{ unreadCount, setUnreadCount }} />
+        </Suspense>
       </Box>
     </Box>
   );

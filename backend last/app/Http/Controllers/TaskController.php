@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+
 use Illuminate\Http\Request;
 use App\Services\TaskService;
 
@@ -8,11 +9,13 @@ class TaskController extends Controller
 {
     protected TaskService $taskService;
 
+    /** Initialize the controller with task service dependency. */
     public function __construct(TaskService $taskService)
     {
         $this->taskService = $taskService;
     }
 
+    /** List tasks and progress for a project. */
     public function getProjectTasks(Request $request, $projectId)
     {
         $result = $this->taskService->getProjectTasks($projectId, $request->user());
@@ -24,6 +27,7 @@ class TaskController extends Controller
         ]);
     }
 
+    /** Create a new task for a project. */
     public function create(Request $request)
     {
         $validatedData = $request->validate([
@@ -43,6 +47,7 @@ class TaskController extends Controller
         ], 201);
     }
 
+    /** Update an existing task. */
     public function update(Request $request, $id)
     {
         $validatedData = $request->validate([
@@ -62,6 +67,7 @@ class TaskController extends Controller
         ]);
     }
 
+    /** Delete a task. */
     public function delete(Request $request, $id)
     {
         $result = $this->taskService->deleteTask($id, $request->user());

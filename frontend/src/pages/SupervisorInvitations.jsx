@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import toast from "react-hot-toast";
 import {
   Box,
@@ -25,15 +26,19 @@ import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import HighlightOffRoundedIcon from "@mui/icons-material/HighlightOffRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 
+/** Supervisor invitation inbox with accept/reject actions. */
 export default function SupervisorInvitations() {
   const { token, user, authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { t, lang } = useLanguage();
   const roleName = (user?.role || "").toLowerCase();
+  const dateLocale = lang === "ar" ? "ar-EG" : "en-US";
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState("");
 
+  /** Loads pending supervisor invitations from the API. */
   const fetchInvitations = async () => {
     try {
       setLoading(true);
@@ -45,14 +50,14 @@ export default function SupervisorInvitations() {
       );
 
       if (!res.ok) {
-        setError(data?.message || "تعذر جلب دعوات الإشراف");
+        setError(data?.message || t("supervisorInvitations.loadError"));
         setItems([]);
         return;
       }
 
       setItems(data?.invitations || []);
     } catch {
-      setError("خطأ أثناء الاتصال بالسيرفر");
+      setError(t("common.serverError"));
     } finally {
       setLoading(false);
     }
@@ -64,6 +69,7 @@ export default function SupervisorInvitations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  /** Accepts a supervisor invitation and refreshes sidebar badges. */
   const acceptInvite = async (inviteId) => {
     try {
       setBusyId(inviteId);
@@ -71,18 +77,21 @@ export default function SupervisorInvitations() {
         `${API_BASE_URL}/supervisor/invitations/${inviteId}/accept`,
         { method: "POST", headers: authHeaders() },
       );
-      if (!res.ok) return toast.error(data?.message || "تعذر قبول الدعوة");
+      if (!res.ok) {
+        return toast.error(data?.message || t("supervisorInvitations.acceptError"));
+      }
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));
-      toast.success("تم قبول الدعوة بنجاح، أنت الآن مشرف على المشروع!");
+      toast.success(t("supervisorInvitations.acceptSuccess"));
       window.dispatchEvent(new Event("updateSidebarBadges"));
     } catch {
-      toast.error("حدث خطأ أثناء قبول الدعوة");
+      toast.error(t("common.serverError"));
     } finally {
       setBusyId(null);
     }
   };
 
+  /** Rejects a supervisor invitation and refreshes sidebar badges. */
   const rejectInvite = async (inviteId) => {
     try {
       setBusyId(inviteId);
@@ -90,13 +99,15 @@ export default function SupervisorInvitations() {
         `${API_BASE_URL}/supervisor/invitations/${inviteId}/reject`,
         { method: "POST", headers: authHeaders() },
       );
-      if (!res.ok) return toast.error(data?.message || "تعذر رفض الدعوة");
+      if (!res.ok) {
+        return toast.error(data?.message || t("supervisorInvitations.rejectError"));
+      }
 
       setItems((prev) => prev.filter((x) => x.id !== inviteId));
-      toast.success("تم رفض الدعوة بنجاح");
+      toast.success(t("supervisorInvitations.rejectSuccess"));
       window.dispatchEvent(new Event("updateSidebarBadges"));
     } catch {
-      toast.error("حدث خطأ أثناء رفض الدعوة");
+      toast.error(t("common.serverError"));
     } finally {
       setBusyId(null);
     }
@@ -106,7 +117,7 @@ export default function SupervisorInvitations() {
     return (
       <Box sx={{ maxWidth: 1200, mx: "auto", mt: 4 }}>
         <Alert severity="warning" sx={{ borderRadius: 2, fontWeight: "bold" }}>
-          هذه الصفحة مخصصة للمشرفين فقط.
+          {t("supervisorInvitations.supervisorsOnly")}
         </Alert>
       </Box>
     );
@@ -114,7 +125,6 @@ export default function SupervisorInvitations() {
 
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
-      {/* Header */}
       <Stack
         direction="row"
         alignItems="center"
@@ -123,10 +133,10 @@ export default function SupervisorInvitations() {
       >
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 900 }}>
-            دعوات الإشراف
+            {t("supervisorInvitations.title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            قم بقبول أو رفض دعوات الإشراف القادمة للمشاريع.
+            {t("supervisorInvitations.subtitle")}
           </Typography>
         </Box>
 
@@ -136,51 +146,47 @@ export default function SupervisorInvitations() {
           onClick={fetchInvitations}
           sx={{ borderRadius: 2, textTransform: "none", fontWeight: 900 }}
         >
-          تحديث
+          {t("common.refresh")}
         </Button>
       </Stack>
 
-      {/* Loading */}
       {loading && (
         <Card sx={{ borderRadius: 3, border: "1px solid #E7E8F0" }}>
           <CardContent>
             <Stack direction="row" spacing={2} alignItems="center">
               <CircularProgress size={22} />
               <Typography sx={{ fontWeight: 700 }}>
-                جارِ تحميل الدعوات...
+                {t("supervisorInvitations.loading")}
               </Typography>
             </Stack>
           </CardContent>
         </Card>
       )}
 
-      {/* Error */}
       {!loading && error && (
         <Alert severity="error" sx={{ borderRadius: 2 }}>
           {error}
         </Alert>
       )}
 
-      {/* Empty */}
       {!loading && !error && items.length === 0 && (
         <Card sx={{ borderRadius: 3, border: "1px solid #E7E8F0" }}>
           <CardContent>
             <Stack spacing={1} alignItems="flex-start">
               <Chip
                 icon={<SchoolRoundedIcon />}
-                label="لا توجد دعوات"
+                label={t("supervisorInvitations.empty")}
                 variant="outlined"
                 sx={{ fontWeight: 800 }}
               />
               <Typography color="text.secondary">
-                عندما يرسل لك طالب دعوة إشراف ستظهر هنا.
+                {t("supervisorInvitations.emptyDesc")}
               </Typography>
             </Stack>
           </CardContent>
         </Card>
       )}
 
-      {/* Table */}
       {!loading && !error && items.length > 0 && (
         <Card sx={{ borderRadius: 3, border: "1px solid #E7E8F0" }}>
           <CardContent>
@@ -191,9 +197,12 @@ export default function SupervisorInvitations() {
               sx={{ mb: 1 }}
             >
               <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                الدعوات الواردة
+                {t("supervisorInvitations.incoming")}
               </Typography>
-              <Chip label={`${items.length} دعوة`} size="small" />
+              <Chip
+                label={t("supervisorInvitations.countBadge", { count: items.length })}
+                size="small"
+              />
             </Stack>
 
             <Divider sx={{ mb: 2 }} />
@@ -201,11 +210,17 @@ export default function SupervisorInvitations() {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 900 }}>المشروع</TableCell>
-                  <TableCell sx={{ fontWeight: 900 }}>مرسلة من</TableCell>
-                  <TableCell sx={{ fontWeight: 900 }}>تاريخ الإرسال</TableCell>
+                  <TableCell sx={{ fontWeight: 900 }}>
+                    {t("supervisorInvitations.project")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 900 }}>
+                    {t("supervisorInvitations.from")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 900 }}>
+                    {t("supervisorInvitations.sentAt")}
+                  </TableCell>
                   <TableCell sx={{ fontWeight: 900, width: 160 }}>
-                    إجراءات
+                    {t("supervisorInvitations.actions")}
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -220,8 +235,7 @@ export default function SupervisorInvitations() {
                     <TableCell>
                       <Stack spacing={0.25}>
                         <Typography sx={{ fontWeight: 800 }}>
-                          {/* قرأنا البيانات من العلاقة student التي أرسلها الباك إند */}
-                          {inv.student?.name || "طالب (مالك المشروع)"}
+                          {inv.student?.name || t("supervisorInvitations.studentOwner")}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {inv.student?.email || ""}
@@ -232,14 +246,14 @@ export default function SupervisorInvitations() {
                     <TableCell>
                       <Typography variant="body2" color="text.secondary">
                         {inv.created_at
-                          ? new Date(inv.created_at).toLocaleString("ar-EG")
+                          ? new Date(inv.created_at).toLocaleString(dateLocale)
                           : "—"}
                       </Typography>
                     </TableCell>
 
                     <TableCell>
                       <Stack direction="row" spacing={1}>
-                        <Tooltip title="قبول">
+                        <Tooltip title={t("common.approve")}>
                           <span>
                             <IconButton
                               color="success"
@@ -251,7 +265,7 @@ export default function SupervisorInvitations() {
                           </span>
                         </Tooltip>
 
-                        <Tooltip title="رفض">
+                        <Tooltip title={t("common.reject")}>
                           <span>
                             <IconButton
                               color="error"

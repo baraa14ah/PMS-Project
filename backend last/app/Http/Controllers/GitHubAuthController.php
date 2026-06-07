@@ -8,6 +8,7 @@ use Laravel\Socialite\Facades\Socialite;
 
 class GitHubAuthController extends Controller
 {
+    /** Redirect the user to GitHub OAuth authorization. */
     public function redirect(Request $request)
     {
         $request->validate([
@@ -25,24 +26,25 @@ class GitHubAuthController extends Controller
             return redirect($this->frontendRedirect('error', $reason));
         }
 
-        /** @var \Laravel\Socialite\Two\GithubProvider $driver */
         $driver = Socialite::driver('github');
+
+        $returnTo = $this->sanitizeReturnTo($request->query('return_to'));
 
         return $driver
             ->scopes(['repo'])
             ->stateless()
-            ->with(['state' => (string) $user->id])
+            ->with(['state' => $this->encodeOAuthState($user->id, $returnTo)])
             ->redirect();
     }
 
+    /** Handle the GitHub OAuth callback and store the token. */
     public function callback(Request $request)
     {
         try {
-            /** @var \Laravel\Socialite\Two\GithubProvider $driver */
             $driver = Socialite::driver('github');
 
             $githubUser = $driver->stateless()->user();
-            $userId = $request->state;
+            [$userId, $returnTo] = $this->decodeOAuthState($request->state);
 
             $user = User::query()->whereKey($userId)->first();
 
@@ -58,12 +60,13 @@ class GitHubAuthController extends Controller
             $user->github_token = $githubUser->token;
             $user->save();
 
-            return redirect($this->frontendRedirect('success'));
+            return redirect($this->frontendRedirect('success', null, $returnTo));
         } catch (\Exception $e) {
-            return redirect($this->frontendRedirect('error'));
+            return redirect($this->frontendRedirect('error', null, '/dashboard'));
         }
     }
 
+    /** Remove the linked GitHub token from the user account. */
     public function unlink(Request $request)
     {
         $user = $request->user();
@@ -85,15 +88,51 @@ class GitHubAuthController extends Controller
         return response()->json(['message' => 'تم إلغاء ربط حساب GitHub بنجاح']);
     }
 
-    private function frontendRedirect(string $result, ?string $reason = null): string
+    /** Build a frontend redirect URL with OAuth result query params. */
+    private function frontendRedirect(string $result, ?string $reason = null, string $returnTo = '/dashboard'): string
     {
         $base = rtrim(env('FRONTEND_URL', 'http://localhost:5173'), '/');
+        $path = $this->sanitizeReturnTo($returnTo);
         $query = 'github=' . $result;
 
         if ($reason !== null) {
             $query .= '&reason=' . $reason;
         }
 
-        return $base . '/dashboard/projects?' . $query;
+        return $base . $path . '?' . $query;
+    }
+
+    /** Encode user ID and return path into OAuth state. */
+    private function encodeOAuthState(int $userId, string $returnTo): string
+    {
+        return $userId . '::' . base64_encode($returnTo);
+    }
+
+    /** Decode OAuth state into user ID and return path. */
+    private function decodeOAuthState(?string $state): array
+    {
+        if (!$state || !str_contains($state, '::')) {
+            return [$state, '/dashboard'];
+        }
+
+        [$userId, $encoded] = explode('::', $state, 2);
+
+        return [$userId, $this->sanitizeReturnTo(base64_decode($encoded) ?: '/dashboard')];
+    }
+
+    /** Sanitize a return path to allowed dashboard routes. */
+    private function sanitizeReturnTo(?string $returnTo): string
+    {
+        $path = is_string($returnTo) ? trim($returnTo) : '/dashboard';
+
+        if ($path === '' || !str_starts_with($path, '/dashboard')) {
+            return '/dashboard';
+        }
+
+        if (str_contains($path, '://') || str_starts_with($path, '//')) {
+            return '/dashboard';
+        }
+
+        return $path;
     }
 }

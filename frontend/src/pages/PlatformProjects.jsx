@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import toast from "react-hot-toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import {
@@ -23,12 +24,36 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  MenuItem,
+  IconButton,
+  Tooltip,
+  alpha,
 } from "@mui/material";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import HourglassBottomRoundedIcon from "@mui/icons-material/HourglassBottomRounded";
+import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import ListToolbar from "../components/ListToolbar";
 
+const PROJECT_STATUS_STYLES = {
+  pending: {
+    color: "#F59E0B",
+    Icon: HourglassBottomRoundedIcon,
+  },
+  in_progress: {
+    color: "#3B82F6",
+    Icon: AutorenewRoundedIcon,
+  },
+  completed: {
+    color: "#10B981",
+    Icon: CheckCircleRoundedIcon,
+  },
+};
+
+/** Platform admin page for browsing and managing all projects. */
 export default function PlatformProjects() {
   const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { t } = useLanguage();
 
   const [projects, setProjects] = useState([]);
   const [universities, setUniversities] = useState([]);
@@ -48,14 +73,66 @@ export default function PlatformProjects() {
     onConfirm: null,
   });
   const [dialogLoading, setDialogLoading] = useState(false);
+  /** Closes the confirmation dialog. */
   const closeDialog = () =>
     setDialogConfig((p) => ({ ...p, isOpen: false }));
 
   useEffect(() => {
-    const t = setTimeout(() => setSearchDebounced(search), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setSearchDebounced(search), 400);
+    return () => clearTimeout(timer);
   }, [search]);
 
+  const statusLabel = useMemo(
+    () => ({
+      pending: t("dashboard.pending"),
+      in_progress: t("dashboard.inProgress"),
+      completed: t("dashboard.completed"),
+    }),
+    [t],
+  );
+
+  /** Renders a styled project status chip. */
+  const renderStatusChip = (status) => {
+    const key = String(status || "pending").toLowerCase();
+    const style = PROJECT_STATUS_STYLES[key];
+    const label = statusLabel[key] || status || "—";
+
+    if (!style) {
+      return (
+        <Chip
+          size="small"
+          variant="outlined"
+          label={label}
+          sx={{ fontWeight: 700 }}
+        />
+      );
+    }
+
+    const StatusIcon = style.Icon;
+    return (
+      <Chip
+        size="small"
+        icon={<StatusIcon sx={{ fontSize: "15px !important" }} />}
+        label={label}
+        sx={{
+          fontWeight: 800,
+          bgcolor: alpha(style.color, 0.12),
+          color: style.color,
+          border: "1px solid",
+          borderColor: alpha(style.color, 0.32),
+          "& .MuiChip-icon": { color: style.color },
+        }}
+      />
+    );
+  };
+
+  const statusOptions = [
+    { value: "pending", label: statusLabel.pending },
+    { value: "in_progress", label: statusLabel.in_progress },
+    { value: "completed", label: statusLabel.completed },
+  ];
+
+  /** Loads universities for the filter dropdown. */
   const fetchUniversities = async () => {
     const { res, data } = await apiFetch(`${API_BASE_URL}/admin/universities`, {
       headers: authHeaders(),
@@ -63,6 +140,7 @@ export default function PlatformProjects() {
     if (res.ok) setUniversities(data?.universities || []);
   };
 
+  /** Fetches projects with current search and filter params. */
   const fetchProjects = async () => {
     try {
       setLoading(true);
@@ -76,7 +154,7 @@ export default function PlatformProjects() {
         `${API_BASE_URL}/admin/projects${qs ? `?${qs}` : ""}`,
         { headers: authHeaders() },
       );
-      if (!res.ok) throw new Error(data?.message || "تعذر جلب المشاريع");
+      if (!res.ok) throw new Error(data?.message || t("platformProjects.loadError"));
       setProjects(data?.projects || []);
     } catch (e) {
       setError(e.message);
@@ -87,6 +165,7 @@ export default function PlatformProjects() {
 
   useEffect(() => {
     fetchUniversities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -94,6 +173,7 @@ export default function PlatformProjects() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchDebounced, statusFilter, universityFilter]);
 
+  /** Saves project edits from the edit dialog. */
   const handleSave = async () => {
     if (!editData) return;
     setSaving(true);
@@ -110,8 +190,8 @@ export default function PlatformProjects() {
           }),
         },
       );
-      if (!res.ok) throw new Error(data?.message || "تعذر التحديث");
-      toast.success("تم تحديث المشروع");
+      if (!res.ok) throw new Error(data?.message || t("platformProjects.updateError"));
+      toast.success(t("platformProjects.updated"));
       setEditData(null);
       fetchProjects();
     } catch (e) {
@@ -121,11 +201,12 @@ export default function PlatformProjects() {
     }
   };
 
+  /** Opens a confirm dialog and deletes the project on approval. */
   const handleDelete = (project) => {
     setDialogConfig({
       isOpen: true,
-      title: "حذف المشروع؟",
-      content: `حذف "${project.title}" نهائياً؟`,
+      title: t("platformProjects.deleteTitle"),
+      content: t("platformProjects.deleteContent", { title: project.title }),
       onConfirm: async () => {
         try {
           setDialogLoading(true);
@@ -133,8 +214,8 @@ export default function PlatformProjects() {
             `${API_BASE_URL}/admin/projects/${project.id}`,
             { method: "DELETE", headers: authHeaders() },
           );
-          if (!res.ok) throw new Error(data?.message || "تعذر الحذف");
-          toast.success("تم حذف المشروع");
+          if (!res.ok) throw new Error(data?.message || t("platformProjects.deleteError"));
+          toast.success(t("platformProjects.deleted"));
           fetchProjects();
           closeDialog();
         } catch (e) {
@@ -147,15 +228,6 @@ export default function PlatformProjects() {
     });
   };
 
-  const statusLabel = useMemo(
-    () => ({
-      pending: "قيد الانتظار",
-      in_progress: "قيد التنفيذ",
-      completed: "مكتمل",
-    }),
-    [],
-  );
-
   return (
     <Box>
       <Stack
@@ -166,10 +238,10 @@ export default function PlatformProjects() {
       >
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 900 }}>
-            إدارة المشاريع (المنصة)
+            {t("platformProjects.title")}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            عرض وتعديل وحذف جميع مشاريع الجامعات
+            {t("platformProjects.subtitle")}
           </Typography>
         </Box>
       </Stack>
@@ -177,23 +249,23 @@ export default function PlatformProjects() {
       <ListToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="بحث بعنوان المشروع..."
+        searchPlaceholder={t("platformProjects.searchPlaceholder")}
         onRefresh={fetchProjects}
         filters={[
           {
             key: "status",
-            label: "الحالة",
+            label: t("projects.statusFilter"),
             value: statusFilter,
             onChange: setStatusFilter,
             options: [
-              { value: "pending", label: "قيد الانتظار" },
-              { value: "in_progress", label: "قيد التنفيذ" },
-              { value: "completed", label: "مكتمل" },
+              { value: "pending", label: t("dashboard.pending") },
+              { value: "in_progress", label: t("dashboard.inProgress") },
+              { value: "completed", label: t("dashboard.completed") },
             ],
           },
           {
             key: "university",
-            label: "الجامعة",
+            label: t("common.university"),
             value: universityFilter,
             onChange: setUniversityFilter,
             options: universities.map((u) => ({
@@ -214,18 +286,21 @@ export default function PlatformProjects() {
         {loading ? (
           <Box sx={{ p: 4, textAlign: "center" }}>
             <CircularProgress />
+            <Typography sx={{ mt: 2, fontWeight: 700, color: "text.secondary" }}>
+              {t("common.loading")}
+            </Typography>
           </Box>
         ) : (
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>العنوان</TableCell>
-                  <TableCell>الجامعة</TableCell>
-                  <TableCell>المالك</TableCell>
-                  <TableCell>المشرف</TableCell>
-                  <TableCell>الحالة</TableCell>
-                  <TableCell align="right">إجراءات</TableCell>
+                  <TableCell>{t("platformProjects.colTitle")}</TableCell>
+                  <TableCell>{t("platformProjects.colUniversity")}</TableCell>
+                  <TableCell>{t("platformProjects.colOwner")}</TableCell>
+                  <TableCell>{t("platformProjects.colSupervisor")}</TableCell>
+                  <TableCell>{t("platformProjects.colStatus")}</TableCell>
+                  <TableCell align="right">{t("platformProjects.colActions")}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -243,33 +318,35 @@ export default function PlatformProjects() {
                     <TableCell>{p.university?.name || "—"}</TableCell>
                     <TableCell>{p.user?.name || "—"}</TableCell>
                     <TableCell>{p.supervisor?.name || "—"}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={statusLabel[p.status] || p.status || "—"}
-                      />
-                    </TableCell>
+                    <TableCell>{renderStatusChip(p.status)}</TableCell>
                     <TableCell align="right">
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setEditData({
-                            id: p.id,
-                            title: p.title,
-                            description: p.description || "",
-                            status: p.status || "pending",
-                          })
-                        }
-                      >
-                        تعديل
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={() => handleDelete(p)}
-                      >
-                        حذف
-                      </Button>
+                      <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                        <Tooltip title={t("common.edit")}>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() =>
+                              setEditData({
+                                id: p.id,
+                                title: p.title,
+                                description: p.description || "",
+                                status: p.status || "pending",
+                              })
+                            }
+                          >
+                            <EditRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={t("common.delete")}>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDelete(p)}
+                          >
+                            <DeleteOutlineRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -285,12 +362,12 @@ export default function PlatformProjects() {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>تعديل مشروع</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>{t("platformProjects.editTitle")}</DialogTitle>
         <DialogContent>
           {editData && (
             <Stack spacing={2} sx={{ mt: 1 }}>
               <TextField
-                label="العنوان"
+                label={t("projects.titleLabel")}
                 fullWidth
                 value={editData.title}
                 onChange={(e) =>
@@ -298,7 +375,7 @@ export default function PlatformProjects() {
                 }
               />
               <TextField
-                label="الوصف"
+                label={t("projects.descLabel")}
                 fullWidth
                 multiline
                 minRows={2}
@@ -310,34 +387,56 @@ export default function PlatformProjects() {
                   }))
                 }
               />
-              <TextField
-                select
-                label="الحالة"
-                fullWidth
-                value={editData.status}
-                onChange={(e) =>
-                  setEditData((prev) => ({ ...prev, status: e.target.value }))
-                }
-              >
-                <MenuItem value="pending">قيد الانتظار</MenuItem>
-                <MenuItem value="in_progress">قيد التنفيذ</MenuItem>
-                <MenuItem value="completed">مكتمل</MenuItem>
-              </TextField>
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 1, display: "block" }}>
+                  {t("projects.statusFilter")}
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {statusOptions.map((opt) => {
+                    const style = PROJECT_STATUS_STYLES[opt.value];
+                    const StatusIcon = style.Icon;
+                    const selected = editData.status === opt.value;
+                    return (
+                      <Chip
+                        key={opt.value}
+                        clickable
+                        onClick={() =>
+                          setEditData((prev) => ({ ...prev, status: opt.value }))
+                        }
+                        icon={<StatusIcon sx={{ fontSize: "15px !important" }} />}
+                        label={opt.label}
+                        variant={selected ? "filled" : "outlined"}
+                        sx={{
+                          fontWeight: 800,
+                          bgcolor: selected ? alpha(style.color, 0.16) : "transparent",
+                          color: style.color,
+                          borderColor: alpha(style.color, selected ? 0.45 : 0.28),
+                          "& .MuiChip-icon": { color: style.color },
+                        }}
+                      />
+                    );
+                  })}
+                </Stack>
+              </Box>
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditData(null)}>إلغاء</Button>
+          <Button onClick={() => setEditData(null)}>{t("common.cancel")}</Button>
           <Button variant="contained" onClick={handleSave} disabled={saving}>
-            حفظ
+            {saving ? t("common.executing") : t("common.save")}
           </Button>
         </DialogActions>
       </Dialog>
 
       <ConfirmDialog
-        {...dialogConfig}
-        dialogLoading={dialogLoading}
+        open={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        content={dialogConfig.content}
+        loading={dialogLoading}
         onClose={closeDialog}
+        onConfirm={dialogConfig.onConfirm}
+        confirmColor="error"
       />
     </Box>
   );

@@ -23,14 +23,13 @@ class Notification extends Model
         'read_at' => 'datetime',
     ];
 
-    /**
-     * الإشعار يعود لمستخدم واحد
-     */
+    /** Returns the user who owns this notification. */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
+    /** Scopes notifications to the authenticated user's university. */
     public function scopeForCurrentUniversity($query)
     {
         if (!auth()->check() || !auth()->user()->university_id) {

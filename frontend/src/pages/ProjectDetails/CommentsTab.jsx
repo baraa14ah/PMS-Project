@@ -1,24 +1,30 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
-  Paper,
   Typography,
   Stack,
   TextField,
-  Button,
-  Alert,
   IconButton,
   Tooltip,
+  Avatar,
+  Chip,
+  Button,
+  alpha,
 } from "@mui/material";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
+import { useLanguage } from "../../context/LanguageContext";
 
-// Icons
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
+import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
+import ProjectSectionShell from "../../components/ProjectSectionShell";
 
+/** Project comments chat panel with add, edit, and delete support. */
 export default function CommentsTab({
   projectId,
   comments,
@@ -28,19 +34,61 @@ export default function CommentsTab({
   setDialogConfig,
   setDialogLoading,
   closeDialog,
+  variant = "tab",
 }) {
-  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { authHeaders, apiFetch, API_BASE_URL, user } = useAuth();
+  const { t, lang } = useLanguage();
+  const dateLocale = lang === "ar" ? "ar-EG" : "en-US";
+  const isSidebar = variant === "sidebar";
+  const currentUserName = user?.user?.name ?? user?.name ?? "";
 
-  // الحالات الخاصة بالتعليقات فقط (تم عزلها هنا لكي لا تزدحم الصفحة الرئيسية)
   const [newComment, setNewComment] = useState("");
-  const [commentMsg, setCommentMsg] = useState({ type: "", text: "" });
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentValue, setEditingCommentValue] = useState("");
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-  // ---------------- الدوال ----------------
+  const scrollContainerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  /** Scrolls the message list to the latest comment. */
+  const scrollToBottom = useCallback((behavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
+  }, []);
+
+  /** Toggles the scroll-to-bottom button based on scroll position. */
+  const handleMessagesScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBtn(distanceFromBottom > 120);
+  }, []);
+
+  const sortedComments = useMemo(
+    () =>
+      [...comments].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      ),
+    [comments],
+  );
+
+  useEffect(() => {
+    if (sortedComments.length === 0) return;
+    const timer = window.setTimeout(() => scrollToBottom("auto"), 50);
+    return () => window.clearTimeout(timer);
+  }, [sortedComments.length, scrollToBottom]);
+
+  /** Resolves the display name for a comment author. */
+  const resolveAuthorName = (comment, isMine) => {
+    const apiName = comment.user?.name?.trim();
+    if (apiName) return apiName;
+    if (isMine && currentUserName) return currentUserName;
+    return t("projectDetails.unknownUser");
+  };
+
+  /** Posts a new comment to the project. */
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return toast.error("لا يمكن إرسال تعليق فارغ ⚠️");
+    if (!newComment.trim()) return toast.error(t("projectDetails.emptyComment"));
 
     try {
       const { res, data } = await apiFetch(
@@ -52,19 +100,21 @@ export default function CommentsTab({
         },
       );
 
-      if (!res.ok) return toast.error(data?.message || "تعذر إرسال التعليق ❌");
+      if (!res.ok) return toast.error(data?.message || t("projectDetails.commentSendError"));
 
-      setComments((prev) => [data?.comment, ...prev].filter(Boolean));
+      setComments((prev) => [...prev, data?.comment].filter(Boolean));
       setNewComment("");
-      toast.success("تمت إضافة التعليق بنجاح 💬");
+      toast.success(t("projectDetails.commentSent"));
+      window.setTimeout(() => scrollToBottom(), 80);
     } catch {
-      toast.error("حدث خطأ أثناء الاتصال بالسيرفر 🌐");
+      toast.error(t("common.serverError"));
     }
   };
 
+  /** Saves edits to an existing comment. */
   const handleUpdateComment = async (commentId) => {
     if (!editingCommentValue.trim())
-      return toast.error("لا يمكن حفظ تعليق فارغ");
+      return toast.error(t("projectDetails.emptyCommentSave"));
 
     try {
       const { res } = await apiFetch(`${API_BASE_URL}/comment/${commentId}`, {
@@ -73,27 +123,28 @@ export default function CommentsTab({
         body: JSON.stringify({ comment: editingCommentValue }),
       });
 
-      if (!res.ok) return toast.error("تعذر تعديل التعليق");
+      if (!res.ok) return toast.error(t("projectDetails.commentUpdateError"));
 
       setComments((prev) =>
         prev.map((c) =>
           c.id === commentId ? { ...c, comment: editingCommentValue } : c,
         ),
       );
-      toast.success("تم تعديل التعليق بنجاح ✏️");
+      toast.success(t("projectDetails.commentUpdated"));
       setEditingCommentId(null);
       setEditingCommentValue("");
     } catch {
-      toast.error("حدث خطأ أثناء التعديل");
+      toast.error(t("projectDetails.commentUpdateFailed"));
     }
   };
 
+  /** Opens a confirm dialog and deletes a comment on approval. */
   const handleDeleteComment = (commentId) => {
     setDialogConfig({
       isOpen: true,
-      title: "حذف التعليق؟",
-      content: "هل أنت متأكد أنك تريد حذف هذا التعليق نهائياً؟",
-      confirmText: "حذف",
+      title: t("projectDetails.commentDeleteTitle"),
+      content: t("projectDetails.commentDeleteContent"),
+      confirmText: t("common.delete"),
       confirmColor: "error",
       onConfirm: async () => {
         try {
@@ -104,15 +155,15 @@ export default function CommentsTab({
           });
 
           if (!res.ok) {
-            toast.error("تعذر حذف التعليق ❌");
+            toast.error(t("projectDetails.commentDeleteError"));
             return;
           }
 
           setComments((prev) => prev.filter((c) => c.id !== commentId));
-          toast.success("تم حذف التعليق بنجاح");
+          toast.success(t("projectDetails.commentDeleted"));
           closeDialog();
         } catch {
-          toast.error("خطأ في الاتصال 🌐");
+          toast.error(t("common.serverError"));
         } finally {
           setDialogLoading(false);
         }
@@ -120,169 +171,391 @@ export default function CommentsTab({
     });
   };
 
-  // ---------------- الواجهة ----------------
-  return (
-    <Paper
-      elevation={0}
+  const avatarSize = isSidebar ? 32 : 40;
+  const msgFontSize = isSidebar ? "0.82rem" : "0.95rem";
+  const chatHeight = isSidebar ? undefined : { xs: "min(68vh, 640px)", md: "min(72vh, 720px)" };
+
+  const chatPanel = (
+    <Box
       sx={{
-        p: 2,
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
-        minWidth: 0,
-        borderRadius: 3,
-        border: "1px solid #EAEAEA",
+        height: chatHeight,
+        minHeight: isSidebar ? undefined : { xs: 420, md: 480 },
+        borderRadius: isSidebar ? 0 : 3,
+        position: "relative",
+        border: isSidebar ? "none" : "1px solid",
+        borderColor: "divider",
+        bgcolor: isSidebar
+          ? "transparent"
+          : (theme) =>
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.background.default, 0.5)
+                : alpha("#F8FAFC", 0.95),
+        overflow: "hidden",
       }}
     >
-      <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
-        التعليقات
-      </Typography>
-
-      {/* صندوق إضافة التعليق */}
-      <Box component="form" onSubmit={handleAddComment} sx={{ mb: 2 }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-          <TextField
-            fullWidth
-            multiline
-            minRows={1}
-            maxRows={4}
-            size="small"
-            label="اكتب تعليقك"
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-          />
-          <Button type="submit" variant="contained" sx={{ minWidth: 120 }}>
-            إرسال
-          </Button>
-        </Stack>
-      </Box>
-
-      {/* 🎯 صندوق التعليقات القابل للتمرير (حل مشكلة طول الصفحة) */}
       <Box
+        ref={scrollContainerRef}
+        onScroll={handleMessagesScroll}
         sx={{
-          maxHeight: "450px", // أقصى ارتفاع للصندوق
-          overflowY: "auto", // تفعيل التمرير العمودي
-          pr: 1, // مسافة صغيرة من اليمين لشريط التمرير
-          "&::-webkit-scrollbar": { width: "6px" },
+          flex: 1,
+          overflowY: "auto",
+          px: isSidebar ? 1.5 : { xs: 2, sm: 2.5 },
+          py: isSidebar ? 1.5 : 2,
+          display: "flex",
+          flexDirection: "column",
+          gap: isSidebar ? 1 : 1.25,
+          minHeight: 0,
+          "&::-webkit-scrollbar": { width: 6 },
           "&::-webkit-scrollbar-thumb": {
-            backgroundColor: "#ccc",
-            borderRadius: "10px",
+            bgcolor: "divider",
+            borderRadius: 10,
           },
         }}
       >
-        {comments.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            لا توجد تعليقات بعد.
-          </Typography>
+        {sortedComments.length === 0 ? (
+          <Box sx={{ flex: 1, display: "grid", placeItems: "center", py: isSidebar ? 4 : 8 }}>
+            <Stack alignItems="center" spacing={1.5} sx={{ px: 2, textAlign: "center" }}>
+              <ForumRoundedIcon sx={{ fontSize: isSidebar ? 36 : 56, color: "text.disabled" }} />
+              <Typography
+                color="text.secondary"
+                sx={{ fontWeight: 800, fontSize: isSidebar ? "0.85rem" : "1.1rem" }}
+              >
+                {t("projectDetails.noComments")}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 360 }}>
+                {t("projectDetails.commentsEmptyHint")}
+              </Typography>
+            </Stack>
+          </Box>
         ) : (
-          <Stack spacing={1}>
-            {comments.map((c) => {
-              const canEdit = currentUserId && c.user_id === currentUserId;
+          <>
+            {sortedComments.map((c) => {
+              const isMine = Number(c.user_id) === Number(currentUserId);
+              const canEdit = currentUserId && isMine;
               const canDelete = currentRole === "admin" || canEdit;
               const isEditing = editingCommentId === c.id;
+              const authorName = resolveAuthorName(c, isMine);
+              const timeLabel = c.created_at
+                ? new Date(c.created_at).toLocaleString(dateLocale, {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    day: "numeric",
+                    month: "short",
+                  })
+                : "";
 
               return (
-                <Paper
+                <Box
                   key={c.id}
-                  variant="outlined"
-                  sx={{ p: 1.5, borderRadius: 2, borderColor: "#EFEFEF" }}
+                  sx={{
+                    display: "flex",
+                    gap: 1.25,
+                    p: isSidebar ? 1.25 : 1.5,
+                    borderRadius: 2.5,
+                    border: "1px solid",
+                    borderColor: isMine
+                      ? (theme) => alpha(theme.palette.primary.main, 0.28)
+                      : "divider",
+                    bgcolor: isMine
+                      ? (theme) => alpha(theme.palette.primary.main, 0.05)
+                      : "background.paper",
+                  }}
                 >
-                  <Stack
-                    direction="row"
-                    justifyContent="space-between"
-                    alignItems="flex-start"
+                  <Avatar
+                    sx={{
+                      width: avatarSize,
+                      height: avatarSize,
+                      fontSize: isSidebar ? "0.75rem" : "0.9rem",
+                      fontWeight: 800,
+                      flexShrink: 0,
+                      bgcolor: isMine ? "secondary.main" : "primary.main",
+                    }}
                   >
-                    <Box>
-                      <Typography sx={{ fontWeight: 800 }}>
-                        {c.user?.name || "مستخدم"}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {c.created_at
-                          ? new Date(c.created_at).toLocaleString("ar-EG")
-                          : ""}
-                      </Typography>
-                    </Box>
-                    {(canEdit || canDelete) && (
-                      <Stack direction="row" spacing={0.5}>
-                        {canEdit && !isEditing && (
-                          <Tooltip title="تعديل">
-                            <IconButton
-                              size="small"
-                              onClick={() => {
-                                setEditingCommentId(c.id);
-                                setEditingCommentValue(c.comment || "");
-                              }}
-                            >
-                              <EditRoundedIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                    {authorName.charAt(0)}
+                  </Avatar>
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      spacing={1}
+                      sx={{ mb: 0.75 }}
+                    >
+                      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ fontWeight: 900, lineHeight: 1.2 }}
+                          noWrap
+                        >
+                          {authorName}
+                        </Typography>
+                        {isMine && (
+                          <Chip
+                            size="small"
+                            label={t("projectDetails.commentYou")}
+                            sx={{
+                              height: 20,
+                              fontWeight: 800,
+                              fontSize: "0.68rem",
+                              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                              color: "primary.main",
+                            }}
+                          />
                         )}
-                        {canDelete && (
-                          <Tooltip title="حذف">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDeleteComment(c.id)}
-                            >
-                              <DeleteOutlineRoundedIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        )}
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontWeight: 600, flexShrink: 0 }}
+                        >
+                          · {timeLabel}
+                        </Typography>
                       </Stack>
-                    )}
-                  </Stack>
-                  <Box sx={{ mt: 1 }}>
+
+                      {(canEdit || canDelete) && !isEditing && (
+                        <Stack direction="row" spacing={0.25} sx={{ flexShrink: 0 }}>
+                          {canEdit && (
+                            <Tooltip title={t("common.edit")}>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setEditingCommentId(c.id);
+                                  setEditingCommentValue(c.comment || "");
+                                }}
+                              >
+                                <EditRoundedIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          {canDelete && (
+                            <Tooltip title={t("common.delete")}>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDeleteComment(c.id)}
+                              >
+                                <DeleteOutlineRoundedIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Stack>
+                      )}
+                    </Stack>
+
                     {isEditing ? (
-                      <>
+                      <Stack spacing={0.75}>
                         <TextField
                           fullWidth
                           multiline
                           minRows={2}
+                          size="small"
                           value={editingCommentValue}
-                          onChange={(e) =>
-                            setEditingCommentValue(e.target.value)
-                          }
+                          onChange={(e) => setEditingCommentValue(e.target.value)}
                         />
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          justifyContent="flex-end"
-                          sx={{ mt: 1 }}
-                        >
-                          <Button
+                        <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                          <IconButton size="small" color="primary" onClick={() => handleUpdateComment(c.id)}>
+                            <SaveRoundedIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
                             size="small"
-                            variant="contained"
-                            startIcon={<SaveRoundedIcon />}
-                            onClick={() => handleUpdateComment(c.id)}
-                          >
-                            حفظ
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<CancelRoundedIcon />}
                             onClick={() => {
                               setEditingCommentId(null);
                               setEditingCommentValue("");
                             }}
                           >
-                            إلغاء
-                          </Button>
+                            <CancelRoundedIcon fontSize="small" />
+                          </IconButton>
                         </Stack>
-                      </>
+                      </Stack>
                     ) : (
                       <Typography
-                        variant="body2"
-                        sx={{ whiteSpace: "pre-wrap" }}
+                        variant="body1"
+                        sx={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: msgFontSize }}
                       >
                         {c.comment}
                       </Typography>
                     )}
                   </Box>
-                </Paper>
+                </Box>
               );
             })}
-          </Stack>
+            <Box ref={messagesEndRef} sx={{ height: 1, flexShrink: 0 }} />
+          </>
         )}
       </Box>
-    </Paper>
+
+      {showScrollBtn && sortedComments.length > 0 && (
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: isSidebar ? 72 : 88,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 2,
+          }}
+        >
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<KeyboardArrowDownRoundedIcon />}
+            onClick={() => scrollToBottom()}
+            sx={{
+              fontWeight: 800,
+              textTransform: "none",
+              borderRadius: 99,
+              px: 2,
+              boxShadow: 3,
+              bgcolor: "#8B5CF6",
+              "&:hover": { bgcolor: "#7C3AED" },
+            }}
+          >
+            {t("projectDetails.scrollToLatest")}
+          </Button>
+        </Box>
+      )}
+
+      <Box
+        component="form"
+        onSubmit={handleAddComment}
+        sx={{
+          px: isSidebar ? 1.5 : { xs: 2, sm: 3, md: 4 },
+          py: isSidebar ? 1.25 : 2,
+          borderTop: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.paper",
+          flexShrink: 0,
+        }}
+      >
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="flex-end"
+          sx={{
+            p: isSidebar ? 0.75 : 1.25,
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: (theme) =>
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.background.default, 0.8)
+                : "#fff",
+            boxShadow: isSidebar
+              ? "none"
+              : (theme) =>
+                  theme.palette.mode === "dark"
+                    ? "none"
+                    : "0 4px 16px rgba(15,23,42,0.06)",
+          }}
+        >
+          <TextField
+            fullWidth
+            multiline
+            minRows={isSidebar ? 1 : 2}
+            maxRows={isSidebar ? 3 : 5}
+            size={isSidebar ? "small" : "medium"}
+            variant="standard"
+            placeholder={t("projectDetails.commentPlaceholder")}
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            InputProps={{ disableUnderline: true }}
+            sx={{
+              "& .MuiInputBase-input": {
+                fontSize: isSidebar ? "0.85rem" : "1rem",
+                py: 0.75,
+                px: 0.5,
+              },
+            }}
+          />
+          <IconButton
+            type="submit"
+            size={isSidebar ? "small" : "medium"}
+            sx={{
+              width: isSidebar ? 36 : 48,
+              height: isSidebar ? 36 : 48,
+              bgcolor: "#8B5CF6",
+              color: "#fff",
+              flexShrink: 0,
+              "&:hover": { bgcolor: "#7C3AED" },
+            }}
+          >
+            <SendRoundedIcon sx={{ fontSize: isSidebar ? 18 : 22 }} />
+          </IconButton>
+        </Stack>
+      </Box>
+    </Box>
+  );
+
+  if (isSidebar) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
+        <Box
+          sx={{
+            flexShrink: 0,
+            px: 2,
+            py: 1.5,
+            borderBottom: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            borderTop: "3px solid",
+            borderTopColor: "#8B5CF6",
+          }}
+        >
+          <Stack direction="row" alignItems="center" spacing={1.25}>
+            <ForumRoundedIcon sx={{ color: "#8B5CF6", fontSize: 22 }} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 900, fontSize: "0.9rem", lineHeight: 1.2 }}>
+                {t("projectDetails.commentsSidebarTitle")}
+              </Typography>
+            </Box>
+            {comments.length > 0 && (
+              <Chip
+                size="small"
+                label={comments.length}
+                sx={{
+                  height: 22,
+                  fontWeight: 900,
+                  fontSize: "0.72rem",
+                  bgcolor: alpha("#8B5CF6", 0.12),
+                  color: "#7C3AED",
+                }}
+              />
+            )}
+          </Stack>
+        </Box>
+        {chatPanel}
+      </Box>
+    );
+  }
+
+  return (
+    <ProjectSectionShell
+      icon={ForumRoundedIcon}
+      title={t("projectDetails.commentsTitle")}
+      subtitle={t("projectDetails.commentsSubtitle")}
+      accent="#8B5CF6"
+      noPadding
+      actions={
+        <Chip
+          size="small"
+          label={t("projectDetails.commentsCount", { count: comments.length })}
+          sx={{ fontWeight: 800 }}
+        />
+      }
+      contentSx={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+    >
+      {chatPanel}
+    </ProjectSectionShell>
   );
 }

@@ -6,11 +6,13 @@ use App\Models\Project;
 use App\Models\Role;
 use App\Models\University;
 use App\Models\User;
+use App\Services\UserDeletionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PlatformAdminController extends Controller
 {
+    /** Return platform-wide dashboard statistics. */
     public function dashboardStats()
     {
         return response()->json([
@@ -25,9 +27,55 @@ class PlatformAdminController extends Controller
                     ->whereHas('role', fn ($q) => $q->whereNotIn('name', ['super_admin', 'admin']))
                     ->count(),
             ],
+            'universities_breakdown' => $this->universitiesUsersBreakdown(),
         ]);
     }
 
+    /** Build per-university user and project breakdown stats. */
+    private function universitiesUsersBreakdown(): array
+    {
+        $roleIds = Role::query()->pluck('id', 'name');
+
+        return University::query()
+            ->orderBy('name')
+            ->get()
+            ->map(function (University $uni) use ($roleIds) {
+                $base = User::query()
+                    ->whereHas('role', fn ($q) => $q->where('name', '!=', 'super_admin'))
+                    ->where(function ($q) use ($uni) {
+                        $q->where('university_id', $uni->id)
+                            ->orWhereHas(
+                                'supervisorUniversities',
+                                fn ($sq) => $sq->where('universities.id', $uni->id),
+                            );
+                    });
+
+                $countByRole = function (string $role) use ($base, $roleIds) {
+                    $roleId = $roleIds->get($role);
+                    if (!$roleId) {
+                        return 0;
+                    }
+
+                    return (clone $base)->where('role_id', $roleId)->count();
+                };
+
+                return [
+                    'id'           => $uni->id,
+                    'name'         => $uni->name,
+                    'is_active'    => (bool) $uni->is_active,
+                    'users_total'  => (clone $base)->count(),
+                    'students'     => $countByRole('student'),
+                    'supervisors'  => $countByRole('supervisor'),
+                    'admins'       => $countByRole('admin'),
+                    'pending'      => (clone $base)->where('status', 'pending')->count(),
+                    'projects'     => Project::query()->where('university_id', $uni->id)->count(),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /** List all platform users with optional filters. */
     public function indexUsers(Request $request)
     {
         $query = User::query()
@@ -48,6 +96,7 @@ class PlatformAdminController extends Controller
         return response()->json(['users' => $query->get()]);
     }
 
+    /** Create a new platform user. */
     public function storeUser(Request $request)
     {
         $request->validate([
@@ -104,6 +153,7 @@ class PlatformAdminController extends Controller
         ], 201);
     }
 
+    /** Update an existing platform user. */
     public function updateUser(Request $request, $id)
     {
         $user = User::query()->whereKey($id)->first();
@@ -180,9 +230,10 @@ class PlatformAdminController extends Controller
         ]);
     }
 
-    public function destroyUser($id)
+    /** Delete a platform user. */
+    public function destroyUser(Request $request, $id, UserDeletionService $deletionService)
     {
-        $user = User::query()->whereKey($id)->first();
+        $user = User::query()->with('role')->whereKey($id)->first();
         if (!$user) {
             return response()->json(['message' => 'User not found'], 404);
         }
@@ -191,9 +242,17 @@ class PlatformAdminController extends Controller
             return response()->json(['message' => 'Cannot delete platform super admin accounts.'], 403);
         }
 
-        return app(UserController::class)->destroy($id);
+        $actorId = (int) $request->user()?->id;
+        if ($actorId && $actorId === (int) $user->id) {
+            return response()->json(['message' => 'Cannot delete your own account.'], 403);
+        }
+
+        $result = $deletionService->delete($user);
+
+        return response()->json(['message' => $result['message']], $result['status']);
     }
 
+    /** List all platform projects with optional filters. */
     public function indexProjects(Request $request)
     {
         $query = Project::query()
@@ -219,6 +278,7 @@ class PlatformAdminController extends Controller
         return response()->json(['projects' => $query->get()]);
     }
 
+    /** Update a platform project. */
     public function updateProject(Request $request, $id)
     {
         $project = Project::query()->whereKey($id)->first();
@@ -241,6 +301,7 @@ class PlatformAdminController extends Controller
         ]);
     }
 
+    /** Delete a platform project and related records. */
     public function destroyProject($id)
     {
         $project = Project::query()->whereKey($id)->first();
@@ -264,6 +325,7 @@ class PlatformAdminController extends Controller
         return response()->json(['message' => 'Project deleted successfully.']);
     }
 
+    /** Sync supervisor university memberships from the request. */
     private function syncSupervisorUniversitiesFromRequest(User $user, Request $request): void
     {
         if (!$user->isSupervisorRole()) {
@@ -278,9 +340,11 @@ class PlatformAdminController extends Controller
             $ids = [(int) $request->university_id];
         }
 
-        $user->syncSupervisorUniversities($ids);
+        $user->syncSupervisorUniversities($ids, 'active', auth()->id());
+        $user->refreshAccountStatusFromMemberships();
     }
 
+    /** Sync student profile data from the user record. */
     private function syncStudentProfile(User $user): void
     {
         $user->loadMissing('role');

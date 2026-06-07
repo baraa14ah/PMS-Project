@@ -7,6 +7,7 @@ import {
 
 const AuthContext = createContext();
 
+/** Provides auth token, user profile, role, and API helpers app-wide. */
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [user, setUser] = useState(null);
@@ -17,6 +18,7 @@ export function AuthProvider({ children }) {
   const [universityName, setUniversityName] = useState(null);
   const [sessionBlock, setSessionBlock] = useState(null);
 
+  /** Resets derived session fields without clearing the token. */
   const clearSessionFields = () => {
     setStatus(null);
     setRole(null);
@@ -25,6 +27,7 @@ export function AuthProvider({ children }) {
     setSessionBlock(null);
   };
 
+  /** Clears token, user, and persisted session state. */
   const invalidateSession = useCallback(() => {
     setToken(null);
     setUser(null);
@@ -33,6 +36,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("token");
   }, []);
 
+  /** Maps `/profile` response into context state. */
   const applyProfileData = (data) => {
     setUser(data);
     setStatus(data?.user?.status || null);
@@ -42,9 +46,30 @@ export function AuthProvider({ children }) {
         : data?.role?.name || null,
     );
     setUniversityId(data?.user?.university_id ?? null);
-    setUniversityName(
-      data?.user?.university?.name || data?.university_name || null,
-    );
+
+    const roleName =
+      typeof data?.role === "string"
+        ? data.role
+        : data?.role?.name || data?.user?.role?.name || "";
+    const activeSupervisorUnis =
+      data?.user?.active_supervisor_university_names || [];
+    const supervisorMemberships = data?.user?.supervisor_memberships || [];
+
+    let resolvedUniversityName =
+      data?.user?.university?.name || data?.university_name || null;
+
+    if (roleName === "supervisor") {
+      if (activeSupervisorUnis.length > 0) {
+        resolvedUniversityName = activeSupervisorUnis.join("، ");
+      } else if (supervisorMemberships.length > 0) {
+        resolvedUniversityName = supervisorMemberships
+          .map((m) => m.name)
+          .filter(Boolean)
+          .join("، ");
+      }
+    }
+
+    setUniversityName(resolvedUniversityName);
     setSessionBlock(null);
 
     if (data?.user && data.user.university_id == null) {
@@ -64,6 +89,7 @@ export function AuthProvider({ children }) {
     return () => registerStatusBlockedHandler(null);
   }, []);
 
+  /** Loads the current user profile using the given bearer token. */
   const fetchUser = async (tok) => {
     if (!tok) return false;
     try {
@@ -98,6 +124,7 @@ export function AuthProvider({ children }) {
     }
   };
 
+  /** Stores a new token and loads the user profile. */
   const login = async (newToken) => {
     setToken(newToken);
     localStorage.setItem("token", newToken);
@@ -107,11 +134,13 @@ export function AuthProvider({ children }) {
     }
   };
 
+  /** Ends the session and redirects to the login page. */
   const logout = useCallback(() => {
     invalidateSession();
     window.location.replace("/login");
   }, [invalidateSession]);
 
+  /** Builds Authorization headers for authenticated API calls. */
   const authHeaders = useCallback(
     (extra = {}) => ({
       Authorization: `Bearer ${token}`,
@@ -161,4 +190,5 @@ export function AuthProvider({ children }) {
   );
 }
 
+/** Hook for reading auth state and actions from AuthContext. */
 export const useAuth = () => useContext(AuthContext);

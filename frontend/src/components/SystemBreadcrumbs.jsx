@@ -16,6 +16,7 @@ const ROUTE_KEYS = {
   student: "breadcrumbs.invitations",
 };
 
+/** Renders translated breadcrumb trail from the current route path. */
 export default function SystemBreadcrumbs() {
   const location = useLocation();
   const { t, dir } = useLanguage();

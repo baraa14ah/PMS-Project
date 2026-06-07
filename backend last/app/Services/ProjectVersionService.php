@@ -5,38 +5,32 @@ namespace App\Services;
 use Carbon\Carbon;
 use App\Models\Project;
 use App\Models\ProjectVersion;
-use App\Models\ProjectActivity; // 🎯 استدعاء الموديل
+use App\Models\ProjectActivity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Services\NotificationService;
 use App\Services\GithubService;
+use App\Support\ProjectAccess;
 
 class ProjectVersionService
 {
     protected NotificationService $notifications;
     protected GithubService $githubService;
 
+    /** Injects notification and GitHub service dependencies. */
     public function __construct(NotificationService $notifications, GithubService $githubService)
     {
         $this->notifications = $notifications;
         $this->githubService = $githubService;
     }
 
+    /** Checks whether the user can access the project. */
     private function canAccessProject($user, Project $project): bool
     {
-        if (!$user) return false;
-
-        $isMember = DB::table('project_members')
-            ->join('projects', 'project_members.project_id', '=', 'projects.id')
-            ->where('projects.id', $project->id)
-            ->where('projects.university_id', $user->university_id)
-            ->where('project_members.student_id', $user->id)
-            ->where('project_members.status', 'accepted')
-            ->exists();
-
-        return $project->user_id === $user->id || $project->supervisor_id === $user->id || $isMember;
+        return ProjectAccess::canAccess($user, $project);
     }
 
+    /** Uploads a new project version file and logs the activity. */
     public function uploadVersion($data, $file, $user)
     {
         $project = Project::query()->whereKey($data['project_id'])->first();
@@ -53,12 +47,13 @@ class ProjectVersionService
             'file_path'           => $path,
         ]);
 
-        // 🎯 تسجيل نشاط رفع الإصدار
         ProjectActivity::create([
             'project_id' => $project->id,
             'user_id' => $user->id,
             'action' => 'رفع إصداراً جديداً: ' . $version->version_title,
-            'type' => 'create'
+            'action_key' => 'versionUploaded',
+            'meta' => ['title' => $version->version_title],
+            'type' => 'create',
         ]);
 
         try {
@@ -70,7 +65,10 @@ class ProjectVersionService
                 data: [
                     'project_id' => $project->id,
                     'version_id' => $version->id,
-                    'url'        => "/dashboard/projects/{$project->id}",
+                    'url' => "/dashboard/projects/{$project->id}",
+                    'actor_name' => $user->name,
+                    'version_title' => $version->version_title,
+                    'project_title' => $project->title,
                 ],
                 ignoreUserId: $user->id
             );
@@ -79,6 +77,7 @@ class ProjectVersionService
         return ['status' => 201, 'message' => 'Version uploaded successfully', 'version' => $version->load('user:id,name')];
     }
 
+    /** Returns all versions for a project if the user has access. */
     public function getVersions($projectId, $user)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -103,6 +102,7 @@ class ProjectVersionService
         return ['status' => 200, 'versions' => $versions];
     }
 
+    /** Deletes a version if the user is the project or version owner. */
     public function deleteVersion($versionId, $user)
     {
         $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
@@ -117,12 +117,13 @@ class ProjectVersionService
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
-        // 🎯 تسجيل نشاط حذف الإصدار
         ProjectActivity::create([
             'project_id' => $project->id,
             'user_id' => $user->id,
             'action' => 'حذف الإصدار: ' . $version->version_title,
-            'type' => 'update'
+            'action_key' => 'versionDeleted',
+            'meta' => ['title' => $version->version_title],
+            'type' => 'update',
         ]);
 
         if ($version->file_path && Storage::disk('public')->exists($version->file_path)) {
@@ -133,6 +134,7 @@ class ProjectVersionService
         return ['status' => 200, 'message' => 'Version deleted successfully'];
     }
 
+    /** Returns versions grouped by month for timeline display. */
     public function getTimeline($projectId, $user)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -156,13 +158,24 @@ class ProjectVersionService
         return ['status' => 200, 'timeline' => $timeline];
     }
 
+    /** Pushes a version file to GitHub on behalf of the project owner. */
     public function pushToGithub($versionId, $user)
     {
         $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
         if (!$version) return ['status' => 404, 'message' => 'Resource not found.'];
 
         $project = Project::query()->whereKey($version->project_id)->first();
-        if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
+        if (!$this->canAccessProject($user, $project)) {
+            return ['status' => 403, 'message' => 'Unauthorized'];
+        }
+
+        if ((int) $project->user_id !== (int) $user->id) {
+            return ['status' => 403, 'message' => 'Only the project owner can push to GitHub.'];
+        }
+
+        if (!$user->github_token) {
+            return ['status' => 403, 'message' => 'Please link your GitHub account first.'];
+        }
 
         return $this->githubService->pushVersionToGithub(
             $project, 
@@ -172,6 +185,7 @@ class ProjectVersionService
         );
     }
 
+    /** Creates in-app notifications for all project participants. */
     public function notifyProject(\App\Models\Project $project, string $type, string $title, string $body, array $data = [], int $ignoreUserId = null)
     {
         $userIds = [];

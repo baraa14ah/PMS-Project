@@ -4,7 +4,6 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import toast from "react-hot-toast";
 
-// 🎯 استدعاء نافذة التأكيد الخاصة بك بدلاً من SweetAlert
 import ConfirmDialog from "../components/ConfirmDialog";
 import ListToolbar from "../components/ListToolbar";
 import { btnPrimarySx } from "../styles/dashboardUi";
@@ -43,18 +42,18 @@ import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
 import GroupRoundedIcon from "@mui/icons-material/GroupRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import DeleteRoundedIcon from "@mui/icons-material/DeleteRounded";
-import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
-import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
-import SupervisorAccountRoundedIcon from "@mui/icons-material/SupervisorAccountRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
-import PendingActionsRoundedIcon from "@mui/icons-material/PendingActionsRounded";
+import HourglassEmptyRoundedIcon from "@mui/icons-material/HourglassEmptyRounded";
 import LockResetRoundedIcon from "@mui/icons-material/LockResetRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import VpnKeyRoundedIcon from "@mui/icons-material/VpnKeyRounded";
+import VerifiedUserRoundedIcon from "@mui/icons-material/VerifiedUserRounded";
+import { ROLE_THEMES } from "../config/roleTheme";
 
+/** Admin user management page with approval and password requests. */
 export default function Users() {
-  const { dir } = useLanguage();
+  const { dir, t } = useLanguage();
   const { token, user: currentUser, authHeaders, apiFetch, API_BASE_URL } =
     useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -78,6 +77,7 @@ export default function Users() {
   const [passwordRequests, setPasswordRequests] = useState([]);
   const [passwordRequestsLoading, setPasswordRequestsLoading] = useState(false);
   const [passwordRequestsError, setPasswordRequestsError] = useState("");
+  const [pendingUsersCount, setPendingUsersCount] = useState(0);
   const [tempPasswordDialog, setTempPasswordDialog] = useState({
     open: false,
     password: "",
@@ -110,6 +110,7 @@ export default function Users() {
     onConfirm: null,
   });
   const [dialogLoading, setDialogLoading] = useState(false);
+  /** Closes the shared confirmation dialog. */
   const closeDialog = () =>
     setDialogConfig((prev) => ({ ...prev, isOpen: false }));
 
@@ -118,6 +119,7 @@ export default function Users() {
     return () => clearTimeout(t);
   }, [search]);
 
+  /** Fetches users filtered by tab, role, and search query. */
   const fetchUsers = async (status = currentTab) => {
     try {
       setLoading(true);
@@ -134,16 +136,17 @@ export default function Users() {
         headers: jsonHeaders,
       });
       if (!res.ok)
-        throw new Error(data?.message || "تعذر جلب بيانات المستخدمين");
+        throw new Error(data?.message || t("users.loadError"));
       setUsers(data?.users || data?.data || []);
     } catch (err) {
       setError(err.message);
-      toast.error("فشل الاتصال بالسيرفر");
+      toast.error(t("users.serverError"));
     } finally {
       setLoading(false);
     }
   };
 
+  /** Loads pending password reset help requests. */
   const fetchPasswordRequests = async () => {
     try {
       setPasswordRequestsLoading(true);
@@ -153,7 +156,7 @@ export default function Users() {
         { headers: jsonHeaders },
       );
       if (!res.ok) {
-        throw new Error(data?.message || "تعذر جلب طلبات كلمة المرور");
+        throw new Error(data?.message || t("users.loadError"));
       }
       setPasswordRequests(data?.requests || []);
     } catch (err) {
@@ -164,6 +167,21 @@ export default function Users() {
     }
   };
 
+  /** Fetches sidebar badge counts for pending user approvals. */
+  const fetchAdminBadges = async () => {
+    if (!token || !isAdmin) return;
+    try {
+      const { res, data } = await apiFetch(`${API_BASE_URL}/dashboard/badges`, {
+        headers: jsonHeaders,
+      });
+      if (res.ok) {
+        setPendingUsersCount(Number(data?.pending_users) || 0);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
   useEffect(() => {
     if (!token || !isAdmin) return;
     apiFetch(`${API_BASE_URL}/password-reset-requests`, { headers: jsonHeaders })
@@ -171,6 +189,7 @@ export default function Users() {
         if (res.ok) setPasswordRequests(data?.requests || []);
       })
       .catch(() => {});
+    fetchAdminBadges();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, isAdmin]);
 
@@ -184,22 +203,24 @@ export default function Users() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currentTab, roleFilter, searchDebounced]);
 
+  /** Switches list tab and syncs the URL search param. */
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
-    if (newValue === "password_requests") {
-      setSearchParams({ tab: "password_requests" });
+    if (newValue === "password_requests" || newValue === "pending") {
+      setSearchParams({ tab: newValue });
     } else {
       setSearchParams({});
     }
   };
 
+  /** Opens confirm dialog to issue a temporary password for a request. */
   const handleIssueTempPassword = (req) => {
     const userName = req?.user?.name || req?.email;
     setDialogConfig({
       isOpen: true,
-      title: "تعيين كلمة مرور مؤقتة؟",
-      content: `سيتم إنشاء كلمة مؤقتة للمستخدم «${userName}». انسخها وأبلغه بها مرة واحدة فقط (لا تُعرض مرة أخرى).`,
-      confirmText: "نعم، إنشاء كلمة مؤقتة",
+      title: t("users.tempPasswordTitle"),
+      content: t("users.tempPasswordContent"),
+      confirmText: t("users.tempPasswordBtn"),
       confirmColor: "primary",
       onConfirm: async () => {
         try {
@@ -212,7 +233,7 @@ export default function Users() {
             const msg =
               data?.errors?.request?.[0] ||
               data?.message ||
-              "تعذر تعيين كلمة المرور";
+              t("common.error");
             throw new Error(msg);
           }
           closeDialog();
@@ -222,7 +243,7 @@ export default function Users() {
             password: data.temporary_password,
             userName,
           });
-          toast.success("تم تعيين كلمة مؤقتة");
+          toast.success(t("users.tempPasswordSet"));
           window.dispatchEvent(new Event("updateSidebarBadges"));
         } catch (e) {
           toast.error(e.message);
@@ -234,13 +255,13 @@ export default function Users() {
     });
   };
 
+  /** Opens confirm dialog to dismiss a password help request. */
   const handleDismissPasswordRequest = (req) => {
-    const userName = req?.user?.name || req?.email;
     setDialogConfig({
       isOpen: true,
-      title: "إغلاق الطلب؟",
-      content: `إغلاق طلب استعادة كلمة المرور للمستخدم «${userName}» دون تعيين كلمة جديدة.`,
-      confirmText: "إغلاق الطلب",
+      title: t("users.dismissRequestTitle"),
+      content: t("users.dismissRequestContent"),
+      confirmText: t("users.dismissRequestBtn"),
       confirmColor: "inherit",
       onConfirm: async () => {
         try {
@@ -250,11 +271,11 @@ export default function Users() {
             { method: "POST", headers: jsonHeaders },
           );
           if (!res.ok) {
-            throw new Error(data?.message || "تعذر إغلاق الطلب");
+            throw new Error(data?.message || t("common.error"));
           }
           setPasswordRequests((prev) => prev.filter((r) => r.id !== req.id));
           closeDialog();
-          toast.success("تم إغلاق الطلب");
+          toast.success(t("users.requestDismissed"));
           window.dispatchEvent(new Event("updateSidebarBadges"));
         } catch (e) {
           toast.error(e.message);
@@ -266,18 +287,20 @@ export default function Users() {
     });
   };
 
+  /** Copies the generated temporary password to the clipboard. */
   const copyTempPassword = async () => {
     try {
       await navigator.clipboard.writeText(tempPasswordDialog.password);
-      toast.success("تم نسخ كلمة المرور");
+      toast.success(t("users.copied"));
     } catch {
-      toast.error("تعذر النسخ — انسخ يدوياً");
+      toast.error(t("users.copyFailed"));
     }
   };
 
+  /** Creates a new user via the admin API. */
   const handleAddSubmit = async () => {
     if (!addData.name || !addData.email) {
-      return toast.error("يرجى تعبئة جميع الحقول المطلوبة");
+      return toast.error(t("users.fillAllFields"));
     }
 
     try {
@@ -296,10 +319,10 @@ export default function Users() {
       });
 
       if (!res.ok) {
-        throw new Error(data?.message || "حدث خطأ أثناء إضافة المستخدم");
+        throw new Error(data?.message || t("common.error"));
       }
 
-      toast.success("تم إضافة المستخدم بنجاح 👏");
+      toast.success(t("users.userAdded"));
       setUsers((prev) => [data.user, ...prev]);
       setAddData({ name: "", email: "", role: "student", student_number: "" });
       setOpenAdd(false);
@@ -310,14 +333,16 @@ export default function Users() {
     }
   };
 
+  /** Opens the edit dialog prefilled with the selected user. */
   const handleOpenEdit = (user) => {
     setEditData({ id: user.id, name: user.name, email: user.email });
     setOpenEdit(true);
   };
 
+  /** Saves name and email changes for the edited user. */
   const handleSaveEdit = async () => {
     if (!editData.name || !editData.email)
-      return toast.error("يرجى تعبئة جميع الحقول");
+      return toast.error(t("users.fillAllFields"));
 
     try {
       setIsSaving(true);
@@ -329,9 +354,9 @@ export default function Users() {
           body: JSON.stringify({ name: editData.name, email: editData.email }),
         },
       );
-      if (!res.ok) throw new Error(data?.message || "حدث خطأ أثناء التعديل");
+      if (!res.ok) throw new Error(data?.message || t("common.error"));
 
-      toast.success("تم تحديث بيانات المستخدم بنجاح 👏");
+      toast.success(t("users.userUpdated"));
       setUsers((prev) =>
         prev.map((u) =>
           u.id === editData.id
@@ -347,12 +372,13 @@ export default function Users() {
     }
   };
 
-  const handleDelete = (id, name) => {
+  /** Opens confirm dialog to delete a user by id. */
+  const handleDelete = (id) => {
     setDialogConfig({
       isOpen: true,
-      title: "حذف المستخدم نهائياً؟",
-      content: `هل أنت متأكد أنك تريد حذف المستخدم "${name}"؟ احذر: إذا كان المستخدم مرتبطاً بمشاريع أو مهام، قد يرفض النظام حذفه للحفاظ على البيانات.`,
-      confirmText: "نعم، احذف المستخدم",
+      title: t("users.deleteConfirmTitle"),
+      content: t("users.deleteConfirmContent"),
+      confirmText: t("users.deleteConfirmBtn"),
       confirmColor: "error",
       onConfirm: async () => {
         try {
@@ -363,12 +389,10 @@ export default function Users() {
           });
 
           if (!res.ok) {
-            throw new Error(
-              data?.message || "تعذر حذف المستخدم من قاعدة البيانات",
-            );
+            throw new Error(data?.message || t("common.error"));
           }
 
-          toast.success("تم حذف المستخدم بنجاح 🗑️");
+          toast.success(t("users.userDeleted"));
           setUsers((prev) => prev.filter((u) => u.id !== id));
           closeDialog();
         } catch (e) {
@@ -381,12 +405,13 @@ export default function Users() {
     });
   };
 
-  const handleApprove = (id, name) => {
+  /** Opens confirm dialog to approve a pending user. */
+  const handleApprove = (id) => {
     setDialogConfig({
       isOpen: true,
-      title: "قبول انضمام المستخدم؟",
-      content: `هل أنت متأكد من قبول انضمام "${name}" للنظام؟ سيتمكن المستخدم من الوصول للمشاريع والمهام.`,
-      confirmText: "نعم، قبول الانضمام",
+      title: t("users.approveConfirmTitle"),
+      content: t("users.approveConfirmContent"),
+      confirmText: t("users.approveConfirmBtn"),
       confirmColor: "success",
       onConfirm: async () => {
         try {
@@ -397,14 +422,25 @@ export default function Users() {
           );
 
           if (!res.ok) {
-            throw new Error(data?.message || "تعذر قبول المستخدم");
+            throw new Error(data?.message || t("common.error"));
           }
 
-          toast.success("تم قبول انضمام المستخدم بنجاح ✅");
+          toast.success(t("users.userApproved"));
+          const approved = data?.user;
           setUsers((prev) =>
-            prev.map((u) => (u.id === id ? { ...u, status: "active" } : u)),
+            prev.map((u) =>
+              u.id === id
+                ? {
+                    ...u,
+                    status: approved?.status ?? "active",
+                    membership_status: approved?.membership_status ?? "active",
+                  }
+                : u,
+            ),
           );
           closeDialog();
+          setPendingUsersCount((c) => Math.max(0, c - 1));
+          window.dispatchEvent(new Event("updateSidebarBadges"));
         } catch (e) {
           toast.error(e.message);
           closeDialog();
@@ -415,12 +451,13 @@ export default function Users() {
     });
   };
 
-  const handleReject = (id, name) => {
+  /** Opens confirm dialog to reject a pending user. */
+  const handleReject = (id) => {
     setDialogConfig({
       isOpen: true,
-      title: "رفض انضمام المستخدم؟",
-      content: `هل أنت متأكد من رفض انضمام "${name}"؟ لن يتمكن المستخدم من الوصول للنظام.`,
-      confirmText: "نعم، رفض الانضمام",
+      title: t("users.rejectConfirmTitle"),
+      content: t("users.rejectConfirmContent"),
+      confirmText: t("users.rejectConfirmBtn"),
       confirmColor: "error",
       onConfirm: async () => {
         try {
@@ -431,14 +468,25 @@ export default function Users() {
           );
 
           if (!res.ok) {
-            throw new Error(data?.message || "تعذر رفض المستخدم");
+            throw new Error(data?.message || t("common.error"));
           }
 
-          toast.success("تم رفض انضمام المستخدم ❌");
+          toast.success(t("users.userRejected"));
+          const rejected = data?.user;
           setUsers((prev) =>
-            prev.map((u) => (u.id === id ? { ...u, status: "rejected" } : u)),
+            prev.map((u) =>
+              u.id === id
+                ? {
+                    ...u,
+                    status: rejected?.status ?? "rejected",
+                    membership_status: rejected?.membership_status ?? "rejected",
+                  }
+                : u,
+            ),
           );
           closeDialog();
+          setPendingUsersCount((c) => Math.max(0, c - 1));
+          window.dispatchEvent(new Event("updateSidebarBadges"));
         } catch (e) {
           toast.error(e.message);
           closeDialog();
@@ -449,6 +497,7 @@ export default function Users() {
     });
   };
 
+  /** Renders a membership status chip (pending, rejected, active). */
   const statusChip = (status) => {
     const s = String(status || "active").toLowerCase();
     if (s === "pending")
@@ -456,8 +505,8 @@ export default function Users() {
         <Chip
           size="small"
           color="warning"
-          icon={<PendingActionsRoundedIcon />}
-          label="قيد الانتظار"
+          icon={<HourglassEmptyRoundedIcon />}
+          label={t("users.statusPending")}
           sx={{ fontWeight: 800 }}
         />
       );
@@ -467,7 +516,7 @@ export default function Users() {
           size="small"
           color="error"
           icon={<CancelRoundedIcon />}
-          label="مرفوض"
+          label={t("users.statusRejected")}
           sx={{ fontWeight: 800 }}
         />
       );
@@ -475,49 +524,51 @@ export default function Users() {
       <Chip
         size="small"
         color="success"
-        icon={<CheckCircleRoundedIcon />}
-        label="نشط"
+        icon={<VerifiedUserRoundedIcon />}
+        label={t("users.statusActive")}
         sx={{ fontWeight: 800 }}
       />
     );
   };
 
+  /** Renders a themed role chip with icon and localized label. */
   const roleChip = (roleName) => {
     const role = String(roleName || "").toLowerCase();
-    if (role === "admin")
+    const theme = ROLE_THEMES[role];
+    
+    const roleLabelMap = {
+      student: t("users.roleStudent"),
+      supervisor: t("users.roleSupervisor"),
+      admin: t("users.roleAdmin"),
+      super_admin: t("roles.super_admin"),
+    };
+    
+    if (theme) {
+      const RoleIcon = theme.icon;
       return (
         <Chip
           size="small"
-          color="error"
-          icon={<AdminPanelSettingsRoundedIcon />}
-          label="مدير"
-          sx={{ fontWeight: 800 }}
+          icon={<RoleIcon />}
+          label={roleLabelMap[role] || role}
+          sx={{
+            fontWeight: 800,
+            bgcolor: theme.accentSoft,
+            color: theme.accent,
+            "& .MuiChip-icon": { color: theme.accent },
+          }}
         />
       );
-    if (role === "supervisor")
-      return (
-        <Chip
-          size="small"
-          color="info"
-          icon={<SupervisorAccountRoundedIcon />}
-          label="مشرف"
-          sx={{ fontWeight: 800 }}
-        />
-      );
-    if (role === "student")
-      return (
-        <Chip
-          size="small"
-          color="success"
-          icon={<SchoolRoundedIcon />}
-          label="طالب"
-          sx={{ fontWeight: 800 }}
-        />
-      );
-    return <Chip size="small" variant="outlined" label={role || "غير معروف"} />;
+    }
+    
+    return <Chip size="small" variant="outlined" label={role || t("users.roleUnknown")} />;
   };
 
   const isPasswordTab = currentTab === "password_requests";
+  const passwordRequestCount = passwordRequests.length;
+  const showPendingAlert =
+    isAdmin && pendingUsersCount > 0 && currentTab !== "pending";
+  const showPasswordAlert =
+    isAdmin && passwordRequestCount > 0 && !isPasswordTab;
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: "auto" }}>
@@ -532,7 +583,7 @@ export default function Users() {
           <Stack direction="row" spacing={1.5} alignItems="center">
             <GroupRoundedIcon color="primary" fontSize="large" />
             <Typography variant="h4" sx={{ fontWeight: 900 }}>
-              إدارة المستخدمين
+              {t("users.title")}
             </Typography>
           </Stack>
           <Typography
@@ -540,7 +591,7 @@ export default function Users() {
             color="text.secondary"
             sx={{ mt: 0.5, fontWeight: 500 }}
           >
-            إضافة، تعديل، وحذف حسابات الطلاب والمشرفين في النظام.
+            {t("users.subtitle")}
           </Typography>
         </Box>
         <Button
@@ -549,9 +600,58 @@ export default function Users() {
           sx={{ ...btnPrimarySx, borderRadius: 2, px: 3, py: 1 }}
           onClick={() => setOpenAdd(true)}
         >
-          مستخدم جديد
+          {t("users.addNew")}
         </Button>
       </Stack>
+
+      {isAdmin && (showPendingAlert || showPasswordAlert) && (
+        <Stack spacing={1.5} sx={{ mb: 2 }}>
+          {showPendingAlert && (
+            <Alert
+              severity="warning"
+              icon={<HourglassEmptyRoundedIcon />}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => handleTabChange(null, "pending")}
+                  sx={{ fontWeight: 800 }}
+                >
+                  {t("users.pendingAlertAction")}
+                </Button>
+              }
+              sx={{ borderRadius: 2, fontWeight: 600 }}
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>
+                {t("users.pendingAlertTitle")}
+              </Typography>
+              {t("users.pendingAlertBody", { count: pendingUsersCount })}
+            </Alert>
+          )}
+          {showPasswordAlert && (
+            <Alert
+              severity="info"
+              icon={<LockResetRoundedIcon />}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => handleTabChange(null, "password_requests")}
+                  sx={{ fontWeight: 800 }}
+                >
+                  {t("users.passwordAlertAction")}
+                </Button>
+              }
+              sx={{ borderRadius: 2, fontWeight: 600 }}
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>
+                {t("users.passwordAlertTitle")}
+              </Typography>
+              {t("users.passwordAlertBody", { count: passwordRequestCount })}
+            </Alert>
+          )}
+        </Stack>
+      )}
 
       <Box sx={{ mb: 3 }}>
         <Tabs
@@ -565,20 +665,35 @@ export default function Users() {
             borderColor: "divider",
           }}
         >
-          <Tab label="الكل" value="all" />
-          <Tab label="قيد الانتظار" value="pending" />
-          <Tab label="نشط" value="active" />
-          <Tab label="مرفوض" value="rejected" />
+          <Tab label={t("users.tabAll")} value="all" />
+          <Tab
+            label={
+              <Stack direction="row" spacing={1} alignItems="center">
+                <span>{t("users.tabPending")}</span>
+                {isAdmin && pendingUsersCount > 0 && (
+                  <Chip
+                    size="small"
+                    color="warning"
+                    label={pendingUsersCount}
+                    sx={{ height: 22, fontWeight: 800 }}
+                  />
+                )}
+              </Stack>
+            }
+            value="pending"
+          />
+          <Tab label={t("users.tabActive")} value="active" />
+          <Tab label={t("users.tabRejected")} value="rejected" />
           {isAdmin && (
             <Tab
               label={
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <span>طلبات كلمة المرور</span>
-                  {passwordRequests.length > 0 && (
+                  <span>{t("users.tabPasswordRequests")}</span>
+                  {passwordRequestCount > 0 && (
                     <Chip
                       size="small"
                       color="warning"
-                      label={passwordRequests.length}
+                      label={passwordRequestCount}
                       sx={{ height: 22, fontWeight: 800 }}
                     />
                   )}
@@ -594,17 +709,17 @@ export default function Users() {
       <ListToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="بحث بالاسم، البريد، أو الرقم الجامعي..."
+        searchPlaceholder={t("users.searchPlaceholder")}
         onRefresh={() => fetchUsers()}
         filters={[
           {
             key: "role",
-            label: "الدور",
+            label: t("users.roleFilter"),
             value: roleFilter,
             onChange: setRoleFilter,
             options: [
-              { value: "student", label: "طالب" },
-              { value: "supervisor", label: "مشرف" },
+              { value: "student", label: t("users.roleStudent") },
+              { value: "supervisor", label: t("users.roleSupervisor") },
             ],
           },
         ]}
@@ -630,7 +745,7 @@ export default function Users() {
                 {passwordRequestsError}
               </Typography>
               <Button variant="outlined" onClick={fetchPasswordRequests}>
-                إعادة المحاولة
+                {t("users.retry")}
               </Button>
             </Box>
           ) : passwordRequests.length === 0 ? (
@@ -639,7 +754,7 @@ export default function Users() {
                 sx={{ fontSize: 56, color: "text.disabled", mb: 2 }}
               />
               <Typography sx={{ fontWeight: 800, color: "text.secondary" }}>
-                لا توجد طلبات استعادة كلمة مرور حالياً.
+                {t("users.passwordRequestsEmpty")}
               </Typography>
             </Box>
           ) : (
@@ -647,14 +762,14 @@ export default function Users() {
               <Table>
                 <TableHead sx={{ bgcolor: "rgba(0,0,0,0.02)" }}>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 900 }}>المستخدم</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>البريد</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>الرقم الجامعي</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>حالة الحساب</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>التاريخ</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>ملاحظة</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>{t("users.user")}</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>{t("users.email")}</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>{t("users.studentNumber")}</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>{t("users.accountStatus")}</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>{t("users.date")}</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>{t("users.note")}</TableCell>
                     <TableCell sx={{ fontWeight: 900, textAlign: "center" }}>
-                      إجراءات
+                      {t("users.actions")}
                     </TableCell>
                   </TableRow>
                 </TableHead>
@@ -685,7 +800,7 @@ export default function Users() {
                           spacing={1}
                           justifyContent="center"
                         >
-                          <Tooltip title="كلمة مرور مؤقتة">
+                          <Tooltip title={t("users.tempPassword")}>
                             <span>
                               <IconButton
                                 color="primary"
@@ -697,7 +812,7 @@ export default function Users() {
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="إغلاق الطلب">
+                          <Tooltip title={t("users.dismissRequest")}>
                             <IconButton
                               size="small"
                               onClick={() => handleDismissPasswordRequest(req)}
@@ -726,7 +841,7 @@ export default function Users() {
           >
             <CircularProgress />
             <Typography sx={{ fontWeight: 800 }} color="text.secondary">
-              جاري جلب بيانات المستخدمين...
+              {t("users.loadingUsers")}
             </Typography>
           </Box>
         ) : error ? (
@@ -735,7 +850,7 @@ export default function Users() {
               {error}
             </Typography>
             <Button variant="outlined" onClick={() => fetchUsers()}>
-              إعادة المحاولة
+              {t("users.retry")}
             </Button>
           </Box>
         ) : users.length === 0 ? (
@@ -747,7 +862,7 @@ export default function Users() {
               variant="h6"
               sx={{ fontWeight: 800, color: "text.secondary" }}
             >
-              لا يوجد مستخدمين في هذا القسم.
+              {t("users.noUsers")}
             </Typography>
           </Box>
         ) : (
@@ -755,26 +870,29 @@ export default function Users() {
             <Table>
               <TableHead sx={{ bgcolor: "rgba(0,0,0,0.02)" }}>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 900, py: 2 }}>الاسم</TableCell>
+                  <TableCell sx={{ fontWeight: 900, py: 2 }}>{t("users.name")}</TableCell>
                   <TableCell sx={{ fontWeight: 900, py: 2 }}>
-                    الرقم الجامعي
+                    {t("users.studentNumber")}
                   </TableCell>
                   <TableCell sx={{ fontWeight: 900, py: 2 }}>
-                    البريد الإلكتروني
+                    {t("users.email")}
                   </TableCell>
                   <TableCell sx={{ fontWeight: 900, py: 2 }}>
-                    الصلاحية
+                    {t("users.role")}
                   </TableCell>
                   <TableCell sx={{ fontWeight: 900, py: 2 }}>
-                    الحالة
+                    {t("users.universities")}
                   </TableCell>
                   <TableCell sx={{ fontWeight: 900, py: 2 }}>
-                    تاريخ الانضمام
+                    {t("users.status")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 900, py: 2 }}>
+                    {t("users.joinDate")}
                   </TableCell>
                   <TableCell
                     sx={{ fontWeight: 900, py: 2, textAlign: "center" }}
                   >
-                    إجراءات
+                    {t("users.actions")}
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -795,7 +913,16 @@ export default function Users() {
                       {u.email}
                     </TableCell>
                     <TableCell>{roleChip(u.role?.name || u.role)}</TableCell>
-                    <TableCell>{statusChip(u.status)}</TableCell>
+                    <TableCell sx={{ color: "text.secondary", maxWidth: 220 }}>
+                      {String(u.role?.name || u.role).toLowerCase() === "supervisor" ? (
+                        <Typography variant="body2" noWrap title={(u.supervisor_university_names || []).join(", ")}>
+                          {(u.supervisor_university_names || []).join("، ") || "—"}
+                        </Typography>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell>{statusChip(u.membership_status || u.status)}</TableCell>
                     <TableCell
                       sx={{ color: "text.secondary", fontSize: "0.9rem" }}
                     >
@@ -809,29 +936,29 @@ export default function Users() {
                         spacing={1}
                         justifyContent="center"
                       >
-                        {isAdmin && u.status === "pending" && (
+                        {isAdmin && (u.membership_status || u.status) === "pending" && (
                           <>
-                            <Tooltip title="قبول">
+                            <Tooltip title={t("users.approve")}>
                               <IconButton
                                 color="success"
                                 size="small"
-                                onClick={() => handleApprove(u.id, u.name)}
+                                onClick={() => handleApprove(u.id)}
                               >
                                 <CheckCircleRoundedIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title="رفض">
+                            <Tooltip title={t("users.reject")}>
                               <IconButton
                                 color="error"
                                 size="small"
-                                onClick={() => handleReject(u.id, u.name)}
+                                onClick={() => handleReject(u.id)}
                               >
                                 <CancelRoundedIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           </>
                         )}
-                        <Tooltip title="تعديل">
+                        <Tooltip title={t("users.edit")}>
                           <IconButton
                             color="primary"
                             size="small"
@@ -840,11 +967,11 @@ export default function Users() {
                             <EditRoundedIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="حذف">
+                        <Tooltip title={t("users.delete")}>
                           <IconButton
                             color="error"
                             size="small"
-                            onClick={() => handleDelete(u.id, u.name)}
+                            onClick={() => handleDelete(u.id)}
                           >
                             <DeleteRoundedIcon fontSize="small" />
                           </IconButton>
@@ -859,7 +986,6 @@ export default function Users() {
         )}
       </Paper>
 
-      {/* نافذة التعديل */}
       <Dialog
         open={openEdit}
         onClose={() => setOpenEdit(false)}
@@ -868,12 +994,12 @@ export default function Users() {
         dir={dir}
       >
         <DialogTitle sx={{ fontWeight: 900 }}>
-          تعديل بيانات المستخدم
+          {t("users.editTitle")}
         </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <TextField
-              label="الاسم الكامل"
+              label={t("users.fullName")}
               fullWidth
               value={editData.name}
               onChange={(e) =>
@@ -881,7 +1007,7 @@ export default function Users() {
               }
             />
             <TextField
-              label="البريد الإلكتروني"
+              label={t("users.email")}
               type="email"
               fullWidth
               value={editData.email}
@@ -898,7 +1024,7 @@ export default function Users() {
             color="inherit"
             sx={{ fontWeight: 800 }}
           >
-            إلغاء
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSaveEdit}
@@ -906,7 +1032,7 @@ export default function Users() {
             disabled={isSaving}
             sx={{ ...btnPrimarySx, px: 3 }}
           >
-            {isSaving ? "جاري الحفظ..." : "حفظ التعديلات"}
+            {isSaving ? t("users.saving") : t("users.saveChanges")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -921,19 +1047,18 @@ export default function Users() {
         dir={dir}
       >
         <DialogTitle sx={{ fontWeight: 900 }}>
-          كلمة المرور المؤقتة — {tempPasswordDialog.userName}
+          {t("users.tempPasswordDialog")} — {tempPasswordDialog.userName}
         </DialogTitle>
         <DialogContent dividers>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            لن تُعرض هذه الكلمة مرة أخرى. انسخها وأبلغ المستخدم فوراً، ثم اطلب
-            منه تغييرها من الملف الشخصي بعد الدخول.
+            {t("users.tempPasswordWarning")}
           </Alert>
           <Paper
             variant="outlined"
             sx={{
               p: 2,
               borderRadius: 2,
-              bgcolor: "#F9FAFB",
+              bgcolor: (theme) => theme.palette.mode === "dark" ? "rgba(255,255,255,0.05)" : "#F9FAFB",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -964,12 +1089,11 @@ export default function Users() {
             }
             sx={btnPrimarySx}
           >
-            تم الإبلاغ
+            {t("users.tempPasswordDone")}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* 🎯 نافذة التأكيد الشاملة والموحدة (MUI) */}
       <ConfirmDialog
         open={dialogConfig.isOpen}
         title={dialogConfig.title}
@@ -980,7 +1104,6 @@ export default function Users() {
         onClose={closeDialog}
         onConfirm={dialogConfig.onConfirm}
       />
-      {/* 🎯 نافذة إضافة مستخدم جديد */}
       <Dialog
         open={openAdd}
         onClose={() => setOpenAdd(false)}
@@ -988,17 +1111,17 @@ export default function Users() {
         fullWidth
         dir={dir}
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>إضافة مستخدم جديد</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>{t("users.addTitle")}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <TextField
-              label="الاسم الكامل"
+              label={t("users.fullName")}
               fullWidth
               value={addData.name}
               onChange={(e) => setAddData({ ...addData, name: e.target.value })}
             />
             <TextField
-              label="البريد الإلكتروني"
+              label={t("users.email")}
               type="email"
               fullWidth
               value={addData.email}
@@ -1009,26 +1132,26 @@ export default function Users() {
             />
 
             <FormControl fullWidth>
-              <InputLabel>صلاحية المستخدم (Role)</InputLabel>
+              <InputLabel>{t("users.userRole")}</InputLabel>
               <Select
                 value={addData.role}
-                label="صلاحية المستخدم (Role)"
+                label={t("users.userRole")}
                 onChange={(e) =>
                   setAddData({ ...addData, role: e.target.value })
                 }
               >
                 <MenuItem value="student" sx={{ fontWeight: 600 }}>
-                  👨‍🎓 طالب
+                  {t("users.roleStudent")}
                 </MenuItem>
                 <MenuItem value="supervisor" sx={{ fontWeight: 600 }}>
-                  👨‍🏫 مشرف
+                  {t("users.roleSupervisor")}
                 </MenuItem>
               </Select>
             </FormControl>
 
             {addData.role === "student" && (
               <TextField
-                label="الرقم الجامعي"
+                label={t("users.studentNumber")}
                 fullWidth
                 required
                 value={addData.student_number}
@@ -1045,7 +1168,7 @@ export default function Users() {
             color="inherit"
             sx={{ fontWeight: 800 }}
           >
-            إلغاء
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleAddSubmit}
@@ -1053,7 +1176,7 @@ export default function Users() {
             disabled={isAdding}
             sx={{ ...btnPrimarySx, px: 3 }}
           >
-            {isAdding ? "جاري الإضافة..." : "إضافة المستخدم"}
+            {isAdding ? t("users.adding") : t("users.addUser")}
           </Button>
         </DialogActions>
       </Dialog>

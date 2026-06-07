@@ -5,11 +5,12 @@ namespace App\Services;
 use App\Models\Project;
 use App\Models\StudentInvitation;
 use App\Models\SupervisorInvitation;
-use App\Models\ProjectActivity; // 🎯 استدعاء الموديل
+use App\Models\ProjectActivity;
 use Illuminate\Support\Facades\DB;
 
 class InvitationService
 {
+    /** Sends a student invitation to join a project. */
     public function inviteStudent($projectId, $studentId, $senderId)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -45,6 +46,7 @@ class InvitationService
         return ['status' => 201, 'invitation' => $invitation];
     }
 
+    /** Returns pending student invitations for the given student. */
     public function getStudentInvitations($studentId)
     {
         return StudentInvitation::query()->forCurrentUniversity()
@@ -55,6 +57,7 @@ class InvitationService
             ->get();
     }
 
+    /** Accepts a student invitation and adds the student as a project member. */
     public function acceptStudentInvitation($inviteId, $user)
     {
         $inv = StudentInvitation::query()->forCurrentUniversity()->whereKey($inviteId)->first();
@@ -72,17 +75,19 @@ class InvitationService
             $inv->update(['status' => 'accepted']);
         });
 
-        // 🎯 تسجيل نشاط انضمام الطالب
         ProjectActivity::create([
             'project_id' => $inv->project_id,
             'user_id' => $user->id,
             'action' => 'انضم إلى المشروع كعضو فريق',
-            'type' => 'join'
+            'action_key' => 'memberJoined',
+            'meta' => [],
+            'type' => 'join',
         ]);
 
         return ['status' => 200, 'message' => 'Accepted'];
     }
 
+    /** Sends a supervisor invitation for a project. */
     public function inviteSupervisor($projectId, $supervisorId, $studentId)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -92,10 +97,14 @@ class InvitationService
             ->whereKey($supervisorId)
             ->where('status', 'active')
             ->whereHas('role', fn ($q) => $q->where('name', 'supervisor'))
-            ->inUniversity($project->university_id)
+            ->whereHas('supervisorUniversities', function ($q) use ($project) {
+                $q->where('universities.id', $project->university_id)
+                    ->where('supervisor_universities.status', 'active')
+                    ->where('supervisor_universities.accepting_supervision', true);
+            })
             ->exists();
         if (!$supervisorAllowed) {
-            return ['status' => 422, 'message' => 'Supervisor is not affiliated with this university.'];
+            return ['status' => 422, 'message' => 'Supervisor is not available for supervision at this university.'];
         }
 
         $exists = SupervisorInvitation::query()->forCurrentUniversity()
@@ -115,6 +124,7 @@ class InvitationService
         return ['status' => 201, 'invitation' => $invitation];
     }
 
+    /** Returns pending supervisor invitations for the given supervisor. */
     public function getSupervisorInvitations($supervisorId)
     {
         return SupervisorInvitation::query()->forCurrentUniversity()
@@ -125,6 +135,7 @@ class InvitationService
             ->get();
     }
 
+    /** Accepts a supervisor invitation and assigns the supervisor to the project. */
     public function acceptSupervisorInvitation($inviteId, $user)
     {
         $inv = SupervisorInvitation::query()->forCurrentUniversity()
@@ -140,12 +151,13 @@ class InvitationService
             Project::query()->whereKey($inv->project_id)->update(['supervisor_id' => $user->id]);
         });
 
-        // 🎯 تسجيل نشاط انضمام المشرف
         ProjectActivity::create([
             'project_id' => $inv->project_id,
             'user_id' => $user->id,
             'action' => 'انضم إلى المشروع كمشرف',
-            'type' => 'join'
+            'action_key' => 'supervisorJoined',
+            'meta' => [],
+            'type' => 'join',
         ]);
 
         return ['status' => 200, 'message' => 'Accepted'];

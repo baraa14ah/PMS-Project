@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box,
-  Paper,
   Typography,
   Stack,
   Button,
@@ -9,17 +8,24 @@ import {
   Chip,
   Autocomplete,
   TextField,
-  Divider,
   InputAdornment,
+  Avatar,
+  Paper,
+  alpha,
 } from "@mui/material";
 import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import SupervisorAccountRoundedIcon from "@mui/icons-material/SupervisorAccountRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import BadgeRoundedIcon from "@mui/icons-material/BadgeRounded";
+import EmailRoundedIcon from "@mui/icons-material/EmailRounded";
+import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
-import { btnPrimarySx, sectionPaperSx } from "../../styles/dashboardUi";
+import { btnPrimarySx } from "../../styles/dashboardUi";
+import ProjectSectionShell from "../../components/ProjectSectionShell";
 
+/** Filters invite options by name, email, or student number. */
 function filterByQuery(options, inputValue) {
   const q = String(inputValue || "").trim().toLowerCase();
   if (!q) return options;
@@ -31,6 +37,7 @@ function filterByQuery(options, inputValue) {
   );
 }
 
+/** Project invitations section for supervisors and students. */
 export default function InvitationsSection({
   projectId,
   project,
@@ -53,6 +60,7 @@ export default function InvitationsSection({
   const [invitingStudent, setInvitingStudent] = useState(false);
   const [studentsLoadMsg, setStudentsLoadMsg] = useState("");
 
+  /** Loads supervisors available for invitation, optionally filtered by search. */
   const fetchSupervisors = useCallback(
     async (search = "") => {
       try {
@@ -70,6 +78,7 @@ export default function InvitationsSection({
     [API_BASE_URL, apiFetch, authHeaders, projectId],
   );
 
+  /** Loads students eligible for invitation, optionally filtered by search. */
   const fetchStudentsForInvite = useCallback(
     async (search = "", showLoading = false) => {
       if (showLoading) setStudentsLoadMsg(t("common.loading"));
@@ -129,11 +138,112 @@ export default function InvitationsSection({
     return () => clearTimeout(id);
   }, [studentInput, canManageProject, projectId, fetchStudentsForInvite]);
 
+  /** Builds the display label for an autocomplete invite option. */
   const optionLabel = (u) => {
-    const parts = [u.name, u.email].filter(Boolean);
+    if (!u) return "";
+    const parts = [u.name];
     if (u.student_number) parts.push(`#${u.student_number}`);
-    return parts.join(" — ");
+    if (u.email) parts.push(u.email);
+    return parts.filter(Boolean).join(" — ");
   };
+
+  /** Renders a student option in the invite autocomplete list. */
+  const renderStudentOption = (props, option) => (
+    <Box
+      component="li"
+      {...props}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        py: 1.5,
+        px: 2,
+        borderBottom: "1px solid",
+        borderColor: "divider",
+        "&:last-child": { borderBottom: "none" },
+      }}
+    >
+      <Avatar
+        sx={{
+          width: 40,
+          height: 40,
+          bgcolor: "primary.main",
+          color: "#fff",
+          fontWeight: 700,
+          fontSize: 14,
+        }}
+      >
+        {option.name?.charAt(0)?.toUpperCase() || "?"}
+      </Avatar>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: 14, color: "text.primary" }} noWrap>
+          {option.name || t("common.unknown")}
+        </Typography>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 0.5 }}>
+          {option.student_number && (
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <BadgeRoundedIcon sx={{ fontSize: 14, color: "primary.main" }} />
+              <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main" }}>
+                {option.student_number}
+              </Typography>
+            </Stack>
+          )}
+          {option.email && (
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <EmailRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }} noWrap>
+                {option.email}
+              </Typography>
+            </Stack>
+          )}
+        </Stack>
+      </Box>
+    </Box>
+  );
+
+  /** Renders a supervisor option in the invite autocomplete list. */
+  const renderSupervisorOption = (props, option) => (
+    <Box
+      component="li"
+      {...props}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        py: 1.5,
+        px: 2,
+        borderBottom: "1px solid",
+        borderColor: "divider",
+        "&:last-child": { borderBottom: "none" },
+      }}
+    >
+      <Avatar
+        sx={{
+          width: 40,
+          height: 40,
+          bgcolor: "info.main",
+          color: "#fff",
+          fontWeight: 700,
+          fontSize: 14,
+        }}
+      >
+        {option.name?.charAt(0)?.toUpperCase() || "?"}
+      </Avatar>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: 14, color: "text.primary" }} noWrap>
+          {option.name || t("common.unknown")}
+        </Typography>
+        {option.email && (
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
+            <EmailRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }} noWrap>
+              {option.email}
+            </Typography>
+          </Stack>
+        )}
+      </Box>
+    </Box>
+  );
 
   const autocompleteCommon = useMemo(
     () => ({
@@ -146,6 +256,7 @@ export default function InvitationsSection({
     [t],
   );
 
+  /** Sends a supervisor invitation for the current project. */
   const handleSendSupervisorInvite = async () => {
     setInviteSupervisorMsg("");
     if (!selectedSupervisor?.id) {
@@ -176,6 +287,7 @@ export default function InvitationsSection({
     }
   };
 
+  /** Sends a student invitation for the current project. */
   const handleInviteStudent = async () => {
     setInviteStudentMsg("");
     if (!selectedStudent?.id) {
@@ -209,31 +321,67 @@ export default function InvitationsSection({
 
   if (!canInviteSupervisor && !canManageProject) return null;
 
+  const inviteCardSx = {
+    flex: 1,
+    p: { xs: 2, md: 2.5 },
+    borderRadius: 2.5,
+    border: "1px solid",
+    borderColor: "divider",
+    bgcolor: (theme) =>
+      theme.palette.mode === "dark"
+        ? alpha("#10B981", 0.08)
+        : alpha("#10B981", 0.05),
+  };
+
   return (
-    <Paper elevation={0} sx={{ ...sectionPaperSx, mt: 2 }}>
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 2, gap: 1 }}>
-        <PersonAddAltRoundedIcon color="primary" />
-        <Typography variant="subtitle1" sx={{ fontWeight: 900, flex: 1, color: "text.primary" }}>
-          {t("projects.invitesTitle")}
-        </Typography>
+    <ProjectSectionShell
+      icon={PersonAddAltRoundedIcon}
+      title={t("projects.invitesTitle")}
+      subtitle={t("projects.invitesSubtitle")}
+      accent="#10B981"
+      sx={{
+        mt: 0,
+        boxShadow: (theme) =>
+          theme.palette.mode === "dark"
+            ? "none"
+            : "0 8px 28px rgba(16,185,129,0.12)",
+      }}
+      actions={
         <Chip
           size="small"
           icon={<SchoolRoundedIcon />}
           label={t("projects.sameUniversityOnly")}
-          color="primary"
+          color="success"
           variant="outlined"
-          sx={{ fontWeight: 700 }}
+          sx={{ fontWeight: 800 }}
         />
-      </Stack>
-
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2.5}>
+      }
+    >
+      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
         {canInviteSupervisor && (
-          <Box sx={{ flex: 1 }}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-              <SupervisorAccountRoundedIcon fontSize="small" color="info" />
-              <Typography variant="body2" sx={{ fontWeight: 800, color: "text.primary" }}>
-                {t("projects.inviteSupervisor")}
-              </Typography>
+          <Paper elevation={0} sx={inviteCardSx}>
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
+              <Box
+                sx={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 2,
+                  display: "grid",
+                  placeItems: "center",
+                  bgcolor: alpha("#0EA5E9", 0.12),
+                  color: "#0EA5E9",
+                }}
+              >
+                <SupervisorAccountRoundedIcon />
+              </Box>
+              <Box>
+                <Typography sx={{ fontWeight: 900, fontSize: "1rem" }}>
+                  {t("projects.inviteSupervisor")}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  {t("projects.inviteSupervisorHint")}
+                </Typography>
+              </Box>
             </Stack>
             {project?.supervisor_id ? (
               <Alert severity="info">{t("projects.supervisorAssigned")}</Alert>
@@ -259,6 +407,10 @@ export default function InvitationsSection({
                     onChange={(_, v) => setSelectedSupervisor(v)}
                     getOptionLabel={optionLabel}
                     isOptionEqualToValue={(a, b) => a?.id === b?.id}
+                    renderOption={renderSupervisorOption}
+                    ListboxProps={{
+                      sx: { p: 0, maxHeight: 280 },
+                    }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -290,24 +442,40 @@ export default function InvitationsSection({
                 </Stack>
               </>
             )}
-          </Box>
-        )}
-
-        {canInviteSupervisor && canManageProject && (
-          <Divider orientation="vertical" flexItem sx={{ display: { xs: "none", md: "block" } }} />
+          </Paper>
         )}
 
         {canManageProject && (
-          <Box sx={{ flex: 1 }}>
+          <Paper elevation={0} sx={inviteCardSx}>
             <Stack
               direction="row"
               justifyContent="space-between"
-              alignItems="center"
-              sx={{ mb: 1 }}
+              alignItems="flex-start"
+              sx={{ mb: 1.5 }}
             >
-              <Typography variant="body2" sx={{ fontWeight: 800, color: "text.primary" }}>
-                {t("projects.inviteStudent")}
-              </Typography>
+              <Stack direction="row" spacing={1.25} alignItems="center">
+                <Box
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 2,
+                    display: "grid",
+                    placeItems: "center",
+                    bgcolor: alpha("#10B981", 0.15),
+                    color: "#10B981",
+                  }}
+                >
+                  <PersonRoundedIcon />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontWeight: 900, fontSize: "1rem" }}>
+                    {t("projects.inviteStudent")}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    {t("projects.inviteStudentHint")}
+                  </Typography>
+                </Box>
+              </Stack>
               <Button size="small" variant="outlined" onClick={() => fetchStudentsForInvite(studentInput)}>
                 {t("projects.refreshList")}
               </Button>
@@ -332,12 +500,16 @@ export default function InvitationsSection({
                 onChange={(_, v) => setSelectedStudent(v)}
                 getOptionLabel={optionLabel}
                 isOptionEqualToValue={(a, b) => a?.id === b?.id}
+                renderOption={renderStudentOption}
+                ListboxProps={{
+                  sx: { p: 0, maxHeight: 280 },
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
                     size="small"
                     label={t("projects.selectStudent")}
-                    placeholder={t("projects.searchInvite")}
+                    placeholder={t("projects.searchStudentInvite")}
                     InputProps={{
                       ...params.InputProps,
                       startAdornment: (
@@ -368,9 +540,9 @@ export default function InvitationsSection({
                 {studentsLoadMsg}
               </Typography>
             )}
-          </Box>
+          </Paper>
         )}
       </Stack>
-    </Paper>
+    </ProjectSectionShell>
   );
 }

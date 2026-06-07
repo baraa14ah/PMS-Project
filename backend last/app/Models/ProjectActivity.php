@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -8,19 +9,25 @@ class ProjectActivity extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['project_id', 'user_id', 'action', 'type'];
+    protected $fillable = ['project_id', 'user_id', 'action', 'type', 'action_key', 'meta'];
 
-    // علاقة الحركة بصاحبها (لنجلب اسمه)
+    protected $casts = [
+        'meta' => 'array',
+    ];
+
+    /** Returns the user who performed this activity. */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
+    /** Returns the project this activity belongs to. */
     public function project()
     {
         return $this->belongsTo(Project::class);
     }
 
+    /** Scopes activities to the authenticated user's university. */
     public function scopeForCurrentUniversity($query)
     {
         if (!auth()->check() || !auth()->user()->university_id) {

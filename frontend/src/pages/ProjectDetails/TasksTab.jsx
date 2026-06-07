@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Box,
   Paper,
@@ -10,17 +10,21 @@ import {
   IconButton,
   Tooltip,
   Avatar,
-  useTheme, // 🎯 أضفنا استدعاء الثيم لمعرفة الوضع الحالي
+  Chip,
+  useTheme,
 } from "@mui/material";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
+import { useLanguage } from "../../context/LanguageContext";
 
-// Icons
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
+import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
+import ProjectSectionShell from "../../components/ProjectSectionShell";
 
+/** Kanban-style project tasks tab with drag-and-drop status updates. */
 export default function TasksTab({
   projectId,
   tasks,
@@ -31,8 +35,10 @@ export default function TasksTab({
   closeDialog,
 }) {
   const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { t, lang } = useLanguage();
+  const dateLocale = lang === "ar" ? "ar-EG" : "en-US";
   const theme = useTheme();
-  const isDark = theme.palette.mode === "dark"; // 🎯 متغير سحري يخبرنا إذا كنا في الوضع الليلي
+  const isDark = theme.palette.mode === "dark";
 
   const today = new Date().toISOString().split("T")[0];
   const maxYear = new Date().getFullYear() + 5;
@@ -53,19 +59,54 @@ export default function TasksTab({
     deadline: "",
   });
   const [savingTask, setSavingTask] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
 
+  const overdueCount = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          task.deadline &&
+          task.deadline < today &&
+          (task.status || "pending") !== "completed",
+      ).length,
+    [tasks, today],
+  );
+
+  const filteredTasks = useMemo(() => {
+    if (statusFilter === "all") return tasks;
+    if (statusFilter === "overdue") {
+      return tasks.filter(
+        (task) =>
+          task.deadline &&
+          task.deadline < today &&
+          (task.status || "pending") !== "completed",
+      );
+    }
+    return tasks.filter((task) => (task.status || "pending") === statusFilter);
+  }, [tasks, statusFilter, today]);
+
+  const filterChips = [
+    { key: "all", label: t("projectDetails.taskFilterAll") },
+    { key: "overdue", label: t("projectDetails.taskFilterOverdue"), count: overdueCount, color: "error" },
+    { key: "pending", label: t("projectDetails.columnPending") },
+    { key: "in_progress", label: t("projectDetails.columnInProgress") },
+    { key: "completed", label: t("projectDetails.columnCompleted") },
+  ];
+
+  /** Validates a task deadline is within allowed date range. */
   const validateDeadline = (dateStr) => {
     if (!dateStr) return true;
-    if (dateStr < today) return "لا يمكن اختيار تاريخ في الماضي.";
-    if (dateStr > maxDate) return "تاريخ بعيد جداً! اختر تاريخاً منطقياً.";
+    if (dateStr < today) return t("projectDetails.datePastError");
+    if (dateStr > maxDate) return t("projectDetails.dateFarError");
     return true;
   };
 
+  /** Creates a new task and updates local progress. */
   const handleCreateTask = async (e) => {
     e.preventDefault();
     setTaskMsg({ type: "", text: "" });
     if (!newTask.title.trim())
-      return setTaskMsg({ type: "error", text: "عنوان المهمة مطلوب." });
+      return setTaskMsg({ type: "error", text: t("projectDetails.taskTitleRequired") });
 
     const dateCheck = validateDeadline(newTask.deadline);
     if (dateCheck !== true)
@@ -86,7 +127,7 @@ export default function TasksTab({
       if (!res.ok)
         return setTaskMsg({
           type: "error",
-          text: data?.message || "تعذر إنشاء المهمة",
+          text: data?.message || t("projectDetails.taskCreateError"),
         });
 
       const newTaskList = [data?.task, ...tasks].filter(Boolean);
@@ -94,14 +135,15 @@ export default function TasksTab({
       updateProgressLocally(newTaskList);
 
       setNewTask({ title: "", description: "", deadline: "" });
-      toast.success("تم إضافة المهمة بنجاح ✅");
+      toast.success(t("projectDetails.taskCreated"));
     } catch {
-      setTaskMsg({ type: "error", text: "حدث خطأ أثناء الاتصال بالسيرفر." });
+      setTaskMsg({ type: "error", text: t("common.serverError") });
     } finally {
       setCreatingTask(false);
     }
   };
 
+  /** Opens inline edit form for a task. */
   const handleEditTaskClick = (task) => {
     setEditingTaskId(task.id);
     setEditTaskData({
@@ -111,8 +153,9 @@ export default function TasksTab({
     });
   };
 
+  /** Saves title, description, and deadline edits for a task. */
   const handleSaveEditTask = async (taskId) => {
-    if (!editTaskData.title.trim()) return toast.error("العنوان مطلوب");
+    if (!editTaskData.title.trim()) return toast.error(t("projectDetails.taskTitleRequiredShort"));
 
     const dateCheck = validateDeadline(editTaskData.deadline);
     if (dateCheck !== true) return toast.error(dateCheck);
@@ -129,27 +172,28 @@ export default function TasksTab({
         }),
       });
 
-      if (!res.ok) return toast.error("تعذر تعديل المهمة");
+      if (!res.ok) return toast.error(t("projectDetails.taskUpdateError"));
 
-      const updated = tasks.map((t) =>
-        t.id === taskId ? { ...t, ...editTaskData } : t,
+      const updated = tasks.map((task) =>
+        task.id === taskId ? { ...task, ...editTaskData } : task,
       );
       setTasks(updated);
       setEditingTaskId(null);
-      toast.success("تم التعديل بنجاح ✏️");
+      toast.success(t("projectDetails.taskUpdated"));
     } catch {
-      toast.error("حدث خطأ في الاتصال بالسيرفر");
+      toast.error(t("common.serverError"));
     } finally {
       setSavingTask(false);
     }
   };
 
+  /** Opens a confirm dialog and deletes a task on approval. */
   const handleDeleteTask = (taskId) => {
     setDialogConfig({
       isOpen: true,
-      title: "هل أنت متأكد؟",
-      content: "هل تريد فعلاً حذف هذه المهمة؟ لا يمكن التراجع.",
-      confirmText: "نعم، احذفها!",
+      title: t("projectDetails.taskDeleteTitle"),
+      content: t("projectDetails.taskDeleteContent"),
+      confirmText: t("projectDetails.taskDeleteConfirm"),
       confirmColor: "error",
       onConfirm: async () => {
         try {
@@ -160,18 +204,18 @@ export default function TasksTab({
           });
 
           if (!res.ok) {
-            toast.error("تعذر حذف المهمة");
+            toast.error(t("projectDetails.taskDeleteError"));
             return;
           }
 
-          const updated = tasks.filter((t) => t.id !== taskId);
+          const updated = tasks.filter((task) => task.id !== taskId);
           setTasks(updated);
           updateProgressLocally(updated);
 
-          toast.success("تم حذف المهمة بنجاح 🗑️");
+          toast.success(t("projectDetails.taskDeleted"));
           closeDialog();
         } catch {
-          toast.error("حدث خطأ أثناء الاتصال بالسيرفر");
+          toast.error(t("common.serverError"));
         } finally {
           setDialogLoading(false);
         }
@@ -179,14 +223,17 @@ export default function TasksTab({
     });
   };
 
+  /** Stores the dragged task id for drop handling. */
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData("taskId", taskId);
   };
 
+  /** Allows dropping a task onto a column. */
   const handleDragOver = (e) => {
     e.preventDefault();
   };
 
+  /** Updates task status after drag-and-drop and syncs to API. */
   const handleDrop = async (e, newStatus) => {
     e.preventDefault();
     const taskId = parseInt(e.dataTransfer.getData("taskId"));
@@ -208,13 +255,14 @@ export default function TasksTab({
       });
       if (!res.ok) throw new Error();
     } catch {
-      toast.error("حدث خطأ أثناء تحديث الحالة");
+      toast.error(t("projectDetails.statusUpdateError"));
     }
   };
 
+  /** Renders a droppable kanban column for a task status. */
   const renderTaskColumn = (statusValue, title, colorCode) => {
-    const columnTasks = tasks.filter(
-      (t) => (t.status || "pending") === statusValue,
+    const columnTasks = filteredTasks.filter(
+      (task) => (task.status || "pending") === statusValue,
     );
 
     return (
@@ -225,7 +273,7 @@ export default function TasksTab({
           onDrop={(e) => handleDrop(e, statusValue)}
           sx={{
             p: 2,
-            bgcolor: isDark ? "background.default" : "#fdfdfd", // 🎯 يتأقلم مع الظلام
+            bgcolor: isDark ? "background.default" : "#fdfdfd",
             borderRadius: "30px",
             minHeight: "450px",
             height: "100%",
@@ -265,22 +313,22 @@ export default function TasksTab({
           </Stack>
 
           <Stack spacing={2} sx={{ flex: 1 }}>
-            {columnTasks.map((t) => {
-              const isEditing = editingTaskId === t.id;
-              const isOverdue = t.deadline && t.deadline < today;
+            {columnTasks.map((task) => {
+              const isEditing = editingTaskId === task.id;
+              const isOverdue = task.deadline && task.deadline < today;
 
               return (
                 <Paper
-                  key={t.id}
+                  key={task.id}
                   elevation={0}
                   draggable={!isEditing}
-                  onDragStart={(e) => handleDragStart(e, t.id)}
+                  onDragStart={(e) => handleDragStart(e, task.id)}
                   sx={{
                     p: 2,
                     borderRadius: "20px",
                     border: "1px solid",
                     borderColor: "divider",
-                    bgcolor: "background.paper", // 🎯 الكارت يأخذ لون الورقة حسب الثيم
+                    bgcolor: "background.paper",
                     cursor: isEditing ? "default" : "grab",
                     "&:active": { cursor: isEditing ? "default" : "grabbing" },
                     transition: "transform 0.2s, box-shadow 0.2s",
@@ -298,7 +346,7 @@ export default function TasksTab({
                     <Stack spacing={1.5}>
                       <TextField
                         size="small"
-                        label="العنوان"
+                        label={t("projectDetails.taskTitle")}
                         value={editTaskData.title}
                         onChange={(e) =>
                           setEditTaskData({
@@ -309,7 +357,7 @@ export default function TasksTab({
                       />
                       <TextField
                         size="small"
-                        label="الوصف"
+                        label={t("projectDetails.descriptionOptional")}
                         value={editTaskData.description}
                         onChange={(e) =>
                           setEditTaskData({
@@ -323,7 +371,7 @@ export default function TasksTab({
                       <TextField
                         size="small"
                         type="date"
-                        label="الموعد النهائي"
+                        label={t("projectDetails.deadline")}
                         InputLabelProps={{ shrink: true }}
                         inputProps={{ min: today, max: maxDate }}
                         value={editTaskData.deadline}
@@ -345,14 +393,15 @@ export default function TasksTab({
                           color="inherit"
                           onClick={() => setEditingTaskId(null)}
                         >
-                          إلغاء
+                          {t("common.cancel")}
                         </Button>
                         <Button
                           size="small"
                           variant="contained"
-                          onClick={() => handleSaveEditTask(t.id)}
+                          disabled={savingTask}
+                          onClick={() => handleSaveEditTask(task.id)}
                         >
-                          حفظ
+                          {savingTask ? t("projectDetails.saving") : t("common.save")}
                         </Button>
                       </Stack>
                     </Stack>
@@ -372,14 +421,14 @@ export default function TasksTab({
                               color: "text.primary",
                             }}
                           >
-                            {t.title}
+                            {task.title}
                           </Typography>
                           <Typography
                             variant="body2"
                             color="text.secondary"
                             sx={{ mb: 2 }}
                           >
-                            {t.description || "بدون وصف"}
+                            {task.description || t("common.noDescription")}
                           </Typography>
                         </Box>
                         <DragIndicatorRoundedIcon
@@ -400,25 +449,25 @@ export default function TasksTab({
                             fontWeight: 700,
                           }}
                         >
-                          {t.deadline
-                            ? new Date(t.deadline).toLocaleDateString("ar-EG")
-                            : "بدون موعد"}
+                          {task.deadline
+                            ? new Date(task.deadline).toLocaleDateString(dateLocale)
+                            : t("common.noDeadline")}
                         </Typography>
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title="تعديل">
+                          <Tooltip title={t("common.edit")}>
                             <IconButton
                               size="small"
-                              onClick={() => handleEditTaskClick(t)}
+                              onClick={() => handleEditTaskClick(task)}
                               sx={{ color: "text.secondary" }}
                             >
                               <EditRoundedIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="حذف">
+                          <Tooltip title={t("common.delete")}>
                             <IconButton
                               size="small"
                               color="error"
-                              onClick={() => handleDeleteTask(t.id)}
+                              onClick={() => handleDeleteTask(task.id)}
                             >
                               <DeleteOutlineRoundedIcon fontSize="small" />
                             </IconButton>
@@ -435,7 +484,7 @@ export default function TasksTab({
               <Box
                 sx={{
                   border: "1.5px dashed",
-                  borderColor: "divider", // 🎯 الخط المنقط يتأقلم
+                  borderColor: "divider",
                   borderRadius: "50px",
                   py: 3,
                   mt: 1,
@@ -448,7 +497,7 @@ export default function TasksTab({
                   variant="body2"
                   sx={{ color: "text.secondary", fontWeight: 600 }}
                 >
-                  اسحب المهام إلى هنا
+                  {t("projectDetails.dragHere")}
                 </Typography>
               </Box>
             )}
@@ -459,13 +508,49 @@ export default function TasksTab({
   };
 
   return (
-    <Box sx={{ mt: 2 }}>
+    <ProjectSectionShell
+      icon={TaskAltRoundedIcon}
+      title={t("projectDetails.tabTasks")}
+      subtitle={t("projectDetails.tasksSubtitle")}
+      accent="#3B82F6"
+      sx={{ mt: 0 }}
+      actions={
+        overdueCount > 0 ? (
+          <Chip
+            size="small"
+            color="error"
+            label={t("projectDetails.overdueCount", { count: overdueCount })}
+            sx={{ fontWeight: 800 }}
+          />
+        ) : (
+          <Chip
+            size="small"
+            label={t("projectDetails.tasksTotal", { count: tasks.length })}
+            sx={{ fontWeight: 800 }}
+          />
+        )
+      }
+    >
+      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mb: 2.5, gap: 0.75 }}>
+        {filterChips.map(({ key, label, count, color }) => (
+          <Chip
+            key={key}
+            label={count != null && count > 0 ? `${label} (${count})` : label}
+            size="small"
+            color={statusFilter === key ? color || "primary" : "default"}
+            variant={statusFilter === key ? "filled" : "outlined"}
+            onClick={() => setStatusFilter(key)}
+            sx={{ fontWeight: 800, cursor: "pointer" }}
+          />
+        ))}
+      </Stack>
+
       <Box component="form" onSubmit={handleCreateTask} sx={{ mb: 4 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
           <TextField
             fullWidth
             size="small"
-            label="عنوان المهمة"
+            label={t("projectDetails.taskTitle")}
             value={newTask.title}
             onChange={(e) =>
               setNewTask((p) => ({ ...p, title: e.target.value }))
@@ -475,7 +560,7 @@ export default function TasksTab({
           <TextField
             fullWidth
             size="small"
-            label="وصف (اختياري)"
+            label={t("projectDetails.descriptionOptional")}
             value={newTask.description}
             onChange={(e) =>
               setNewTask((p) => ({ ...p, description: e.target.value }))
@@ -484,7 +569,7 @@ export default function TasksTab({
           <TextField
             size="small"
             type="date"
-            label="الموعد النهائي"
+            label={t("projectDetails.deadline")}
             InputLabelProps={{ shrink: true }}
             inputProps={{ min: today, max: maxDate }}
             value={newTask.deadline}
@@ -499,7 +584,7 @@ export default function TasksTab({
             disabled={creatingTask}
             sx={{ minWidth: 100, borderRadius: 2, fontWeight: 800 }}
           >
-            {creatingTask ? "..." : "إضافة"}
+            {creatingTask ? "..." : t("common.add")}
           </Button>
         </Stack>
         {taskMsg.text && (
@@ -518,10 +603,10 @@ export default function TasksTab({
         alignItems="stretch"
         sx={{ width: "100%" }}
       >
-        {renderTaskColumn("pending", "قيد الانتظار", "#f39c12")}
-        {renderTaskColumn("in_progress", "قيد التنفيذ", "#3498db")}
-        {renderTaskColumn("completed", "مكتملة", "#2ecc71")}
+        {renderTaskColumn("pending", t("projectDetails.columnPending"), "#f39c12")}
+        {renderTaskColumn("in_progress", t("projectDetails.columnInProgress"), "#3498db")}
+        {renderTaskColumn("completed", t("projectDetails.columnCompleted"), "#2ecc71")}
       </Stack>
-    </Box>
+    </ProjectSectionShell>
   );
 }

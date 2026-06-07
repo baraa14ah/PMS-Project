@@ -15,11 +15,13 @@ class University extends Model
         'is_active' => 'boolean',
     ];
 
+    /** Returns the ID of the default legacy university. */
     public static function defaultId(): int
     {
         return self::where('name', env('DEFAULT_UNIVERSITY_NAME', 'Legacy'))->firstOrFail()->id;
     }
 
+    /** Scopes the query to active universities only. */
     public function scopeActive($query)
     {
         return $query->where('is_active', true);

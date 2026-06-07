@@ -14,9 +14,7 @@ class SystemNotification extends Notification
     protected string $body;
     protected array $data;
 
-    /**
-     * باني الإشعار: يستقبل النوع، العنوان، النص، وبيانات إضافية مثل الروابط
-     */
+    /** Create a system notification with type, title, body, and optional data. */
     public function __construct(
         string $type,
         string $title,
@@ -29,21 +27,15 @@ class SystemNotification extends Notification
         $this->data  = $data;
     }
 
-    /**
-     * نحدد القناة كقاعدة بيانات (Database) ليظهر في لوحة التحكم
-     */
+    /** Specify the notification delivery channels. */
     public function via($notifiable): array
     {
         return ['database'];
     }
 
-    /**
-     * هيكلة البيانات التي سيتم تخزينها في جدول notifications
-     * قمنا بإضافة حل لجعل الرابط (url) متاحاً دائماً في المستوى الأعلى للسهولة
-     */
+    /** Build the array payload stored in the notifications table. */
     public function toDatabase($notifiable): array
     {
-        // استخراج الرابط إذا كان موجوداً لتسهيل الوصول إليه من الفرونت إند
         $url = $this->data['url'] 
             ?? ($this->data['data']['url'] ?? null);
 

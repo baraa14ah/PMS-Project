@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 
 class UniversityController extends Controller
 {
+    /** List active universities for public registration. */
     public function publicList()
     {
         $universities = University::active()
@@ -17,6 +18,7 @@ class UniversityController extends Controller
         return response()->json(['universities' => $universities]);
     }
 
+    /** List all universities for platform admin. */
     public function index()
     {
         $universities = University::orderBy('name')->get();
@@ -24,6 +26,7 @@ class UniversityController extends Controller
         return response()->json(['universities' => $universities]);
     }
 
+    /** Create a new university. */
     public function store(Request $request)
     {
         $request->validate([
@@ -43,6 +46,7 @@ class UniversityController extends Controller
         ], 201);
     }
 
+    /** Update an existing university. */
     public function update(Request $request, $id)
     {
         $university = University::find($id);

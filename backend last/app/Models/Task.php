@@ -20,6 +20,7 @@ class Task extends Model
         'university_id',
     ];
 
+    /** Syncs university_id from the related project on create and update. */
     protected static function booted()
     {
         static::creating(function ($task) {
@@ -35,17 +36,19 @@ class Task extends Model
         });
     }
 
-    // المهمة تابعة لمشروع
+    /** Returns the project this task belongs to. */
     public function project()
     {
         return $this->belongsTo(Project::class);
     }
 
-    // الطالب المعين للمهمة
+    /** Returns the user assigned to this task. */
     public function assignedTo()
     {
         return $this->belongsTo(User::class, 'assigned_to');
     }
+
+    /** Returns the user who created this task. */
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');

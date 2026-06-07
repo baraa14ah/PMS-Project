@@ -13,25 +13,28 @@ class Comment extends Model
         'project_id',
         'task_id',
         'user_id',
-        'comment',   // ✅ لازم موجود
+        'comment',
     ];
 
+    /** Returns the user who wrote this comment. */
     public function user()
     {
         return $this->belongsTo(\App\Models\User::class);
     }
 
-
+    /** Returns the project this comment belongs to. */
     public function project()
     {
         return $this->belongsTo(Project::class);
     }
 
+    /** Returns the task this comment belongs to. */
     public function task()
     {
         return $this->belongsTo(Task::class);
     }
 
+    /** Scopes comments to the authenticated user's university. */
     public function scopeForCurrentUniversity($query)
     {
         if (!auth()->check() || !auth()->user()->university_id) {

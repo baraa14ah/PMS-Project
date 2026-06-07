@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class StudentService
 {
+    /** Returns the project owner and accepted member list. */
     public function getProjectMembers($projectId)
     {
         $project = Project::query()->with(['user:id,name,email'])->whereKey($projectId)->first();
@@ -31,9 +32,7 @@ class StudentService
         ];
     }
 
-    /**
-     * طلاب نفس جامعة المشروع — غير المالك وغير الأعضاء الحاليين في project_members.
-     */
+    /** Returns students eligible for invitation, excluding owner and current members. */
     public function getAvailableStudents($projectId, $search = null)
     {
         $project = Project::query()->whereKey($projectId)->first();

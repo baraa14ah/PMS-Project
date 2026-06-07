@@ -4,12 +4,13 @@ namespace App\Services;
 
 use App\Models\Project;
 use App\Models\GitCommit;
-use App\Models\ProjectActivity; // 🎯 استدعاء الموديل
+use App\Models\ProjectActivity;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class GithubService
 {
+    /** Fetches and stores recent commits from the project's GitHub repository. */
     public function syncProjectCommits(Project $project)
     {
         if (!$project->github_repo_url) {
@@ -84,13 +85,14 @@ class GithubService
                 $saved++;
             }
 
-            // 🎯 تسجيل نشاط جلب التحديثات
             if ($saved > 0) {
                 ProjectActivity::create([
                     'project_id' => $project->id,
-                    'user_id' => auth()->id() ?? $project->user_id, // في حال تم الاستدعاء عبر Job
+                    'user_id' => auth()->id() ?? $project->user_id,
                     'action' => "قام بمزامنة الكود وجلب {$saved} تحديثات من مستودع GitHub",
-                    'type' => 'update'
+                    'action_key' => 'githubSynced',
+                    'meta' => ['count' => $saved],
+                    'type' => 'update',
                 ]);
             }
 
@@ -110,6 +112,7 @@ class GithubService
         }
     }
 
+    /** Uploads a version file to the project's GitHub repository. */
     public function pushVersionToGithub($project, $title, $description, $filePath)
     {
         $user = auth()->user();
@@ -150,13 +153,13 @@ class GithubService
             ]);
 
         if ($response->successful()) {
-            
-            // 🎯 تسجيل نشاط الرفع المباشر إلى جيتهاب
             ProjectActivity::create([
                 'project_id' => $project->id,
                 'user_id' => $user->id,
                 'action' => "دفع الإصدار '{$title}' مباشرة إلى مستودع GitHub",
-                'type' => 'create'
+                'action_key' => 'githubPushed',
+                'meta' => ['title' => $title],
+                'type' => 'create',
             ]);
 
             return ['status' => 200, 'message' => 'تم الرفع إلى GitHub بنجاح! 🚀'];

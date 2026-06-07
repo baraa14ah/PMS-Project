@@ -13,22 +13,23 @@ class UserProfile extends Model
         'avatar',
         'university_name',
         'student_number',
-      ];
-      
-      public function user()
-      {
+    ];
+
+    /** Returns the user who owns this profile. */
+    public function user()
+    {
         return $this->belongsTo(\App\Models\User::class);
-      }
+    }
 
-      public function scopeForCurrentUniversity($query)
-      {
-          if (!auth()->check() || !auth()->user()->university_id) {
-              return $query->whereRaw('1 = 0');
-          }
+    /** Scopes profiles to the authenticated user's university. */
+    public function scopeForCurrentUniversity($query)
+    {
+        if (!auth()->check() || !auth()->user()->university_id) {
+            return $query->whereRaw('1 = 0');
+        }
 
-          return $query->whereHas('user', function ($q) {
-              $q->where('university_id', auth()->user()->university_id);
-          });
-      }
-      
+        return $query->whereHas('user', function ($q) {
+            $q->where('university_id', auth()->user()->university_id);
+        });
+    }
 }

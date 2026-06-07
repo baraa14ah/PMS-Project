@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Models\Role;
 use App\Models\User;
 use App\Notifications\SystemNotification;
 use Illuminate\Notifications\DatabaseNotification;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class NotificationService
 {
+    /** Builds the base query for a user's database notifications. */
     private function baseQuery(int $userId)
     {
         return DatabaseNotification::query()
@@ -17,6 +19,7 @@ class NotificationService
             ->where('notifiable_type', User::class);
     }
 
+    /** Returns paginated notifications and unread count for a user. */
     public function getAll($user)
     {
         $items = $this->baseQuery($user->id)
@@ -34,23 +37,54 @@ class NotificationService
         ];
     }
 
+    /** Marks one or all notifications as read for a user. */
     public function markAsRead($user, $id = null)
     {
         if ($id) {
-            // تحديث إشعار واحد مباشرة في الداتا بيز
             $user->unreadNotifications()->where('id', $id)->update(['read_at' => now()]);
         } else {
-            // تحديث كل الإشعارات مباشرة في الداتا بيز (أقوى وأسرع)
             $user->unreadNotifications()->update(['read_at' => now()]);
         }
 
         return ['unread_count' => 0];
     }
+
+    /** Sends a system notification to a single user. */
     public function notifyUser(User $user, string $type, string $title, ?string $body = null, array $data = []): void
     {
         $user->notify(new SystemNotification($type, $title, $body, $data));
     }
 
+    /** Sends a notification to active admins of the given universities. */
+    public function notifyUniversityAdmins(
+        int|array $universityIds,
+        string $type,
+        string $title,
+        ?string $body = null,
+        array $data = [],
+    ): void {
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $universityIds))));
+        if (empty($ids)) {
+            return;
+        }
+
+        $adminRoleId = Role::query()->where('name', 'admin')->value('id');
+        if (!$adminRoleId) {
+            return;
+        }
+
+        $admins = User::query()
+            ->whereIn('university_id', $ids)
+            ->where('role_id', $adminRoleId)
+            ->where('status', 'active')
+            ->get();
+
+        foreach ($admins as $admin) {
+            $this->notifyUser($admin, $type, $title, $body, $data);
+        }
+    }
+
+    /** Notifies all project participants except the acting user. */
     public function notifyProjectParticipants(int $projectId, int $actorUserId, string $type, string $title, ?string $body = null, array $data = []): void
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -77,7 +111,7 @@ class NotificationService
         }
     }
 
-    // ✅ دالة رديفة لمنع ظهور خطأ Undefined method notifyProject
+    /** Delegates to notifyProjectParticipants using a Project model. */
     public function notifyProject(Project $project, string $type, string $title, string $body, array $data = [], int $ignoreUserId = null)
     {
         $this->notifyProjectParticipants($project->id, $ignoreUserId ?? 0, $type, $title, $body, $data);

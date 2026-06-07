@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\PasswordResetRequest;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -13,10 +12,12 @@ class PasswordResetHelpService
     public const PUBLIC_MESSAGE =
         'إذا كان الحساب مسجّلاً ومفعّلاً في جامعتك، تم إرسال طلبك لمسؤول الجامعة. تواصل معه لمتابعة إعادة التعيين.';
 
+    /** Injects the notification service dependency. */
     public function __construct(
         protected NotificationService $notifications,
     ) {}
 
+    /** Submits or updates a password reset help request for the user. */
     public function submitRequest(string $email, ?string $studentNumber = null, ?string $message = null): void
     {
         $user = User::query()
@@ -64,6 +65,7 @@ class PasswordResetHelpService
         $this->notifyUniversityAdmins($request->fresh(['user.role']));
     }
 
+    /** Returns all pending password reset requests for a university. */
     public function listPendingForUniversity(int $universityId): array
     {
         return PasswordResetRequest::query()
@@ -75,6 +77,7 @@ class PasswordResetHelpService
             ->all();
     }
 
+    /** Returns the count of pending password reset requests for a university. */
     public function pendingCountForUniversity(int $universityId): int
     {
         return PasswordResetRequest::query()
@@ -83,9 +86,7 @@ class PasswordResetHelpService
             ->count();
     }
 
-    /**
-     * @return array{request: PasswordResetRequest, temporary_password: string}
-     */
+    /** Issues a temporary password and resolves the reset request. */
     public function issueTemporaryPassword(PasswordResetRequest $request, User $admin): array
     {
         if ($request->status !== PasswordResetRequest::STATUS_PENDING) {
@@ -127,7 +128,11 @@ class PasswordResetHelpService
             'password.reset_by_admin',
             'تم تعيين كلمة مرور مؤقتة',
             'تواصل مع مسؤول جامعتك للحصول على كلمة المرور الجديدة، ثم غيّرها من الملف الشخصي.',
-            ['request_id' => $request->id],
+            [
+                'request_id' => $request->id,
+                'user_name' => $user->name,
+                'email' => $user->email,
+            ],
         );
 
         return [
@@ -136,6 +141,7 @@ class PasswordResetHelpService
         ];
     }
 
+    /** Dismisses a pending password reset request. */
     public function dismiss(PasswordResetRequest $request, User $admin): PasswordResetRequest
     {
         if ($request->status !== PasswordResetRequest::STATUS_PENDING) {
@@ -151,35 +157,25 @@ class PasswordResetHelpService
         return $request->fresh(['user.role', 'handler']);
     }
 
+    /** Notifies university admins of a new password reset request. */
     protected function notifyUniversityAdmins(PasswordResetRequest $request): void
     {
-        $adminRoleId = Role::query()->where('name', 'admin')->value('id');
-        if (!$adminRoleId) {
-            return;
-        }
-
-        $admins = User::query()
-            ->where('university_id', $request->university_id)
-            ->where('role_id', $adminRoleId)
-            ->where('status', 'active')
-            ->get();
-
         $userName = $request->user?->name ?? $request->email;
         $title = 'طلب استعادة كلمة مرور';
         $body = "طلب المستخدم «{$userName}» ({$request->email}) مساعدة لإعادة تعيين كلمة المرور.";
 
-        foreach ($admins as $admin) {
-            $this->notifications->notifyUser(
-                $admin,
-                'password.reset_request',
-                $title,
-                $body,
-                [
-                    'request_id' => $request->id,
-                    'user_id'    => $request->user_id,
-                    'url'        => '/dashboard/users?tab=password_requests',
-                ],
-            );
-        }
+        $this->notifications->notifyUniversityAdmins(
+            (int) $request->university_id,
+            'password.reset_request',
+            $title,
+            $body,
+            [
+                'request_id' => $request->id,
+                'user_id'    => $request->user_id,
+                'url'        => '/dashboard/users?tab=password_requests',
+                'user_name'  => $userName,
+                'email'      => $request->email,
+            ],
+        );
     }
 }

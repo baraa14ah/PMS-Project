@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import toast from "react-hot-toast";
 import {
   Box,
@@ -23,13 +24,18 @@ import {
   TextField,
   Switch,
   FormControlLabel,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 
+/** Admin page for listing and managing universities. */
 export default function Universities() {
   const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { t, lang } = useLanguage();
+  const dateLocale = lang === "ar" ? "ar-EG" : "en-US";
 
   const [universities, setUniversities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +48,7 @@ export default function Universities() {
   const [formActive, setFormActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  /** Fetches all universities for the admin table. */
   const fetchUniversities = async () => {
     try {
       setLoading(true);
@@ -52,10 +59,10 @@ export default function Universities() {
       if (res.ok && Array.isArray(data?.universities)) {
         setUniversities(data.universities);
       } else {
-        setError(data?.message || "تعذر تحميل الجامعات");
+        setError(data?.message || t("universitiesPage.loadError"));
       }
     } catch {
-      setError("خطأ في الاتصال بالسيرفر");
+      setError(t("common.serverError"));
     } finally {
       setLoading(false);
     }
@@ -66,6 +73,7 @@ export default function Universities() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Opens the dialog in create-university mode. */
   const openAddDialog = () => {
     setEditingUni(null);
     setFormName("");
@@ -74,6 +82,7 @@ export default function Universities() {
     setDialogOpen(true);
   };
 
+  /** Opens the dialog pre-filled for editing a university. */
   const openEditDialog = (uni) => {
     setEditingUni(uni);
     setFormName(uni.name || "");
@@ -82,14 +91,16 @@ export default function Universities() {
     setDialogOpen(true);
   };
 
+  /** Closes the university form dialog and resets edit state. */
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setEditingUni(null);
   };
 
+  /** Creates or updates a university via the admin API. */
   const handleSave = async () => {
     if (!formName.trim()) {
-      toast.error("اسم الجامعة مطلوب");
+      toast.error(t("universitiesPage.nameRequired"));
       return;
     }
 
@@ -117,19 +128,19 @@ export default function Universities() {
       if (!res.ok) {
         const msg = data?.errors
           ? Object.values(data.errors).flat().join(" | ")
-          : data?.message || "حدث خطأ";
+          : data?.message || t("universitiesPage.saveError");
         toast.error(msg);
         setSaving(false);
         return;
       }
 
       toast.success(
-        isEdit ? "تم تحديث الجامعة بنجاح" : "تم إنشاء الجامعة بنجاح",
+        isEdit ? t("universitiesPage.updated") : t("universitiesPage.created"),
       );
       handleCloseDialog();
       fetchUniversities();
     } catch {
-      toast.error("خطأ في الاتصال بالسيرفر");
+      toast.error(t("common.serverError"));
     } finally {
       setSaving(false);
     }
@@ -156,10 +167,10 @@ export default function Universities() {
             <SchoolRoundedIcon color="primary" fontSize="large" />
             <Box>
               <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                إدارة الجامعات
+                {t("universitiesPage.title")}
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                إنشاء وتعديل الجامعات المسجلة في النظام
+                {t("universitiesPage.subtitle")}
               </Typography>
             </Box>
           </Stack>
@@ -169,7 +180,7 @@ export default function Universities() {
             onClick={openAddDialog}
             sx={{ borderRadius: 2, fontWeight: 800, px: 3 }}
           >
-            إضافة جامعة
+            {t("universitiesPage.addUniversity")}
           </Button>
         </Stack>
       </Paper>
@@ -178,7 +189,7 @@ export default function Universities() {
         <Stack direction="row" spacing={2} alignItems="center" sx={{ p: 3 }}>
           <CircularProgress size={24} />
           <Typography sx={{ fontWeight: 700 }} color="text.secondary">
-            جارِ تحميل الجامعات...
+            {t("universitiesPage.loading")}
           </Typography>
         </Stack>
       ) : error ? (
@@ -198,13 +209,23 @@ export default function Universities() {
             <Table>
               <TableHead sx={{ bgcolor: "rgba(0,0,0,0.02)" }}>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 800 }}>#</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>اسم الجامعة</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>Slug</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>الحالة</TableCell>
-                  <TableCell sx={{ fontWeight: 800 }}>تاريخ الإنشاء</TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>
+                    {t("universitiesPage.colIndex")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>
+                    {t("universitiesPage.colName")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>
+                    {t("universitiesPage.colSlug")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>
+                    {t("universitiesPage.colStatus")}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>
+                    {t("universitiesPage.colCreatedAt")}
+                  </TableCell>
                   <TableCell sx={{ fontWeight: 800, textAlign: "left" }}>
-                    إجراءات
+                    {t("universitiesPage.colActions")}
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -213,7 +234,7 @@ export default function Universities() {
                   <TableRow>
                     <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                       <Typography color="text.secondary">
-                        لا توجد جامعات مسجلة بعد.
+                        {t("universitiesPage.empty")}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -228,25 +249,29 @@ export default function Universities() {
                       <TableCell>
                         <Chip
                           size="small"
-                          label={uni.is_active ? "نشطة" : "غير نشطة"}
+                          label={
+                            uni.is_active
+                              ? t("universitiesPage.statusActive")
+                              : t("universitiesPage.statusInactive")
+                          }
                           color={uni.is_active ? "success" : "default"}
                         />
                       </TableCell>
                       <TableCell sx={{ color: "text.secondary" }}>
                         {uni.created_at
-                          ? new Date(uni.created_at).toLocaleDateString("ar-EG")
+                          ? new Date(uni.created_at).toLocaleDateString(dateLocale)
                           : "—"}
                       </TableCell>
                       <TableCell sx={{ textAlign: "left" }}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<EditRoundedIcon />}
-                          onClick={() => openEditDialog(uni)}
-                          sx={{ borderRadius: 1.5, fontWeight: 700 }}
-                        >
-                          تعديل
-                        </Button>
+                        <Tooltip title={t("common.edit")}>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => openEditDialog(uni)}
+                          >
+                            <EditRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))
@@ -265,18 +290,20 @@ export default function Universities() {
         PaperProps={{ sx: { borderRadius: 3 } }}
       >
         <DialogTitle sx={{ fontWeight: 800 }}>
-          {editingUni ? "تعديل الجامعة" : "إضافة جامعة جديدة"}
+          {editingUni
+            ? t("universitiesPage.editUniversity")
+            : t("universitiesPage.addNewUniversity")}
         </DialogTitle>
         <DialogContent sx={{ pt: "16px !important" }}>
           <TextField
-            label="اسم الجامعة"
+            label={t("universitiesPage.nameLabel")}
             fullWidth
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
             sx={{ mb: 2, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
           />
           <TextField
-            label="Slug (اختياري)"
+            label={t("universitiesPage.slugOptional")}
             fullWidth
             value={formSlug}
             onChange={(e) => setFormSlug(e.target.value)}
@@ -290,7 +317,7 @@ export default function Universities() {
                   onChange={(e) => setFormActive(e.target.checked)}
                 />
               }
-              label="الجامعة نشطة"
+              label={t("universitiesPage.activeLabel")}
             />
           )}
         </DialogContent>
@@ -300,7 +327,7 @@ export default function Universities() {
             sx={{ fontWeight: 700 }}
             disabled={saving}
           >
-            إلغاء
+            {t("common.cancel")}
           </Button>
           <Button
             variant="contained"
@@ -311,9 +338,9 @@ export default function Universities() {
             {saving ? (
               <CircularProgress size={20} sx={{ color: "white" }} />
             ) : editingUni ? (
-              "تحديث"
+              t("universitiesPage.updateBtn")
             ) : (
-              "إنشاء"
+              t("universitiesPage.createBtn")
             )}
           </Button>
         </DialogActions>

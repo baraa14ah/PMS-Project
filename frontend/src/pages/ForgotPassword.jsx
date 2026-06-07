@@ -19,6 +19,7 @@ import AuthPageShell from "../components/AuthPageShell";
 import { useLanguage } from "../context/LanguageContext";
 import { API_BASE_URL } from "../utils/api";
 
+/** Password recovery page that submits a help request to admins. */
 export default function ForgotPassword() {
   const { t } = useLanguage();
   const [email, setEmail] = useState("");
@@ -28,6 +29,7 @@ export default function ForgotPassword() {
   const [submitted, setSubmitted] = useState(false);
   const [serverMessage, setServerMessage] = useState("");
 
+  /** Sends password help request and shows confirmation state. */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);

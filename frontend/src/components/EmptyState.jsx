@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Typography, Button, alpha } from "@mui/material";
 import { useLanguage } from "../context/LanguageContext";
 
+/** Centered placeholder shown when a list or section has no data. */
 export default function EmptyState({
   icon,
   title,

@@ -1,4 +1,5 @@
 import React from "react";
+import { useLanguage } from "../context/LanguageContext";
 import {
   Paper,
   Stack,
@@ -10,18 +11,18 @@ import {
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 
-/**
- * Shared search + filter bar for list pages.
- * filters: [{ key, label, value, onChange, options: [{ value, label }] }]
- */
+/** Shared search and filter bar for list pages. */
 export default function ListToolbar({
   search = "",
   onSearchChange,
-  searchPlaceholder = "بحث بالاسم أو البريد...",
+  searchPlaceholder,
   filters = [],
   onRefresh,
   children,
 }) {
+  const { t } = useLanguage();
+  const placeholder = searchPlaceholder || t("common.search");
+
   return (
     <Paper
       elevation={0}
@@ -42,7 +43,7 @@ export default function ListToolbar({
       >
         <TextField
           size="small"
-          placeholder={searchPlaceholder}
+          placeholder={placeholder}
           value={search}
           onChange={(e) => onSearchChange?.(e.target.value)}
           sx={{ minWidth: 220, flex: 1 }}
@@ -65,7 +66,7 @@ export default function ListToolbar({
             onChange={(e) => f.onChange(e.target.value)}
             sx={{ minWidth: 140 }}
           >
-            <MenuItem value="">الكل</MenuItem>
+            <MenuItem value="">{t("common.all")}</MenuItem>
             {(f.options || []).map((opt) => (
               <MenuItem key={opt.value} value={opt.value}>
                 {opt.label}
@@ -84,7 +85,7 @@ export default function ListToolbar({
             onClick={onRefresh}
             sx={{ fontWeight: 700 }}
           >
-            تحديث
+            {t("common.refresh")}
           </Button>
         )}
       </Stack>

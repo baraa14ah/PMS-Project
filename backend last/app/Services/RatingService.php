@@ -11,11 +11,13 @@ class RatingService
 {
     protected RatingRepository $ratings;
 
+    /** Injects the rating repository dependency. */
     public function __construct(RatingRepository $ratings)
     {
         $this->ratings = $ratings;
     }
 
+    /** Creates a rating for a project or returns an error indicator. */
     public function rateProject(Request $request, int $projectId)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -39,6 +41,7 @@ class RatingService
         ]);
     }
 
+    /** Deletes a rating by ID and returns whether it succeeded. */
     public function delete(int $id): bool
     {
         $rating = $this->ratings->find($id);

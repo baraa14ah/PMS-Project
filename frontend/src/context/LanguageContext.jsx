@@ -15,10 +15,12 @@ const bundles = { ar, en };
 
 const LanguageContext = createContext(null);
 
+/** Reads a dotted i18n key from a locale bundle object. */
 function getNested(obj, path) {
   return path.split(".").reduce((acc, key) => (acc == null ? acc : acc[key]), obj);
 }
 
+/** Provides language, direction, and the `t()` translation helper. */
 export function LanguageProvider({ children }) {
   const [lang, setLangState] = useState(
     () => localStorage.getItem(STORAGE_KEY) || "ar",
@@ -39,11 +41,20 @@ export function LanguageProvider({ children }) {
   }, [lang, dir]);
 
   const t = useCallback(
-    (key, fallback = "") => {
-      const value = getNested(bundles[lang], key);
-      if (value != null && value !== "") return value;
-      const alt = getNested(bundles.ar, key);
-      return alt ?? fallback ?? key;
+    (key, params = "") => {
+      let text = getNested(bundles[lang], key);
+      if ((text == null || text === "") && lang === "ar") {
+        text = getNested(bundles.en, key);
+      }
+      if (text == null || text === "") {
+        text = typeof params === "string" ? params : key;
+      }
+      if (params && typeof params === "object") {
+        Object.entries(params).forEach(([k, v]) => {
+          text = String(text).replaceAll(`{${k}}`, String(v));
+        });
+      }
+      return text;
     },
     [lang],
   );
@@ -58,6 +69,7 @@ export function LanguageProvider({ children }) {
   );
 }
 
+/** Hook for language state and translations. */
 export function useLanguage() {
   const ctx = useContext(LanguageContext);
   if (!ctx) {

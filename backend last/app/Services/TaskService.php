@@ -6,40 +6,31 @@ use App\Models\Task;
 use App\Models\Project;
 use Illuminate\Support\Facades\DB;
 use App\Services\NotificationService;
+use App\Support\ProjectAccess;
 
 class TaskService
 {
     protected NotificationService $notifications;
 
+    /** Injects the notification service dependency. */
     public function __construct(NotificationService $notifications)
     {
         $this->notifications = $notifications;
     }
 
+    /** Returns the role name for the given user. */
     private function getRoleName($user): string
     {
         return $user->role?->name ?? (string)($user->role ?? '');
     }
 
+    /** Checks whether the user can access the project. */
     private function canAccessProject($user, $project): bool
     {
-        if (!$user || !$project) return false;
-
-        if ((int)$project->user_id === (int)$user->id) return true;
-        if ((int)$project->supervisor_id === (int)$user->id) return true;
-
-        return DB::table('project_members')
-            ->join('projects', 'project_members.project_id', '=', 'projects.id')
-            ->where('projects.id', $project->id)
-            ->where('projects.university_id', $user->university_id)
-            ->where('project_members.student_id', $user->id)
-            ->where('project_members.status', 'accepted')
-            ->exists();
+        return ProjectAccess::canAccess($user, $project);
     }
 
-    /**
-     * ✅ دالة حساب نسبة التقدم
-     */
+    /** Calculates task completion percentage for a project. */
     public function calculateProjectProgress($projectId)
     {
         $total = Task::query()->where('project_id', $projectId)->count();
@@ -49,6 +40,7 @@ class TaskService
         return (int) round(($completed / $total) * 100);
     }
 
+    /** Returns all tasks for a project if the user has access. */
     public function getProjectTasks($projectId, $user)
     {
         $project = Project::query()->whereKey($projectId)->first();
@@ -58,7 +50,6 @@ class TaskService
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
-        // ✅ استخدمنا assignedTo بدلاً من user
         $tasks = Task::query()->where('project_id', $projectId)
             ->with('assignedTo') 
             ->orderBy('created_at', 'desc')
@@ -67,6 +58,7 @@ class TaskService
         return ['status' => 200, 'tasks' => $tasks];
     }
 
+    /** Creates a new task and notifies project participants. */
     public function createTask($data, $user)
     {
         $project = Project::query()->whereKey($data['project_id'])->first();
@@ -84,12 +76,13 @@ class TaskService
             'assigned_to' => $user->id,
         ]);
 
-        // 🎯 1. تسجيل النشاط في السجل الزمني
         ProjectActivity::create([
             'project_id' => $project->id,
             'user_id' => $user->id,
             'action' => "أضاف مهمة جديدة: {$task->title}",
-            'type' => 'create'
+            'action_key' => 'taskCreated',
+            'meta' => ['title' => $task->title],
+            'type' => 'create',
         ]);
 
         $this->notifications->notifyProjectParticipants(
@@ -98,7 +91,14 @@ class TaskService
             type: 'task.created',
             title: 'مهمة جديدة',
             body: "{$user->name} أضاف مهمة جديدة: {$task->title}",
-            data: ['project_id' => $project->id, 'task_id' => $task->id, 'url' => "/dashboard/projects/{$project->id}"]
+            data: [
+                'project_id' => $project->id,
+                'task_id' => $task->id,
+                'url' => "/dashboard/projects/{$project->id}",
+                'actor_name' => $user->name,
+                'task_title' => $task->title,
+                'project_title' => $project->title,
+            ],
         );
         $task->load('assignedTo');
 
@@ -109,6 +109,7 @@ class TaskService
         ];
     }
 
+    /** Updates a task and logs status changes with notifications. */
     public function updateTask($taskId, $data, $user)
     {
         $task = Task::query()->whereKey($taskId)->first();
@@ -120,10 +121,7 @@ class TaskService
         $oldStatus = $task->status;
         $task->update($data);
 
-        // إذا تم تغيير حالة المهمة فعلياً
         if (isset($data['status']) && $oldStatus !== $task->status) {
-            
-            // 🎯 2. إعداد وتلوين السجل الزمني بناءً على الحالة
             $activityType = 'update';
             $statusName = 'قيد الانتظار';
 
@@ -139,7 +137,9 @@ class TaskService
                 'project_id' => $project->id,
                 'user_id' => $user->id,
                 'action' => "غيّر حالة المهمة '{$task->title}' إلى {$statusName}",
-                'type' => $activityType
+                'action_key' => 'taskStatusChanged',
+                'meta' => ['title' => $task->title, 'status' => $task->status],
+                'type' => $activityType,
             ]);
 
             $this->notifications->notifyProjectParticipants(
@@ -148,7 +148,15 @@ class TaskService
                 type: 'task.status_changed',
                 title: 'تحديث حالة مهمة',
                 body: "{$user->name} غيّر حالة المهمة '{$task->title}' إلى {$statusName}",
-                data: ['project_id' => $project->id, 'task_id' => $task->id, 'new_status' => $task->status, 'url' => "/dashboard/projects/{$project->id}"]
+                data: [
+                    'project_id' => $project->id,
+                    'task_id' => $task->id,
+                    'new_status' => $task->status,
+                    'url' => "/dashboard/projects/{$project->id}",
+                    'actor_name' => $user->name,
+                    'task_title' => $task->title,
+                    'project_title' => $project->title,
+                ],
             );
         }
 
@@ -159,6 +167,7 @@ class TaskService
         ];
     }
 
+    /** Deletes a task if the user is owner, supervisor, or accepted member. */
     public function deleteTask($taskId, $user)
     {
         $task = Task::query()->whereKey($taskId)->first();
@@ -167,11 +176,9 @@ class TaskService
         $projectId = $task->project_id;
         $project = Project::query()->whereKey($projectId)->first();
         
-        // 1. تحديد الصلاحيات المختلفة
         $isOwner = (int)$project->user_id === (int)$user->id;
         $isSupervisor = (int)$project->supervisor_id === (int)$user->id;
         
-        // التحقق مما إذا كان الطالب عضواً مقبولاً في المشروع
         $isMember = \Illuminate\Support\Facades\DB::table('project_members')
             ->join('projects', 'project_members.project_id', '=', 'projects.id')
             ->where('projects.id', $project->id)
@@ -180,17 +187,17 @@ class TaskService
             ->where('project_members.status', 'accepted')
             ->exists();
 
-        // 2. إذا لم يكن يملك أي صفة من الصفات الثلاث، نمنع الحذف
         if (!$isOwner && !$isSupervisor && !$isMember) {
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
-        // 🎯 3. تسجيل عملية الحذف قبل مسح المهمة من قاعدة البيانات
         ProjectActivity::create([
             'project_id' => $projectId,
             'user_id' => $user->id,
             'action' => "حذف المهمة: {$task->title}",
-            'type' => 'update' // سيظهر باللون البرتقالي/التحذيري
+            'action_key' => 'taskDeleted',
+            'meta' => ['title' => $task->title],
+            'type' => 'update',
         ]);
 
         $task->delete();
@@ -202,9 +209,7 @@ class TaskService
         ];
     }
     
-    /**
-     * جلب إحصائيات سريعة للمشروع (مهام، إنجاز، تواريخ)
-     */
+    /** Returns quick task statistics for a project. */
     public function getProjectStats($projectId)
     {
         $tasks = Task::query()->where('project_id', $projectId)->get();

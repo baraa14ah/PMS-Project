@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 trait BelongsToUniversity
 {
+    /** Registers tenant scope and auto-fills university_id on create. */
     protected static function bootBelongsToUniversity(): void
     {
         /** @var class-string<Model> $modelClass */
@@ -27,6 +28,7 @@ trait BelongsToUniversity
         });
     }
 
+    /** Returns the university this model belongs to. */
     public function university(): BelongsTo
     {
         return $this->belongsTo(University::class);

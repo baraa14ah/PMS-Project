@@ -19,9 +19,7 @@ class RouteServiceProvider extends ServiceProvider
      */
     public const HOME = '/home';
 
-    /**
-     * Define your route model bindings, pattern filters, and other route configuration.
-     */
+    /** Configure rate limiting and register API and web routes. */
     public function boot(): void
     {
         RateLimiter::for('api', function (Request $request) {

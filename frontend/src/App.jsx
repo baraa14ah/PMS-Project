@@ -1,30 +1,33 @@
-import React from "react";
+import React, { lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Projects from "./pages/Projects";
-import Notifications from "./pages/Notifications";
-import ProjectDetails from "./pages/ProjectDetails";
 import DashboardLayout from "./layouts/DashboardLayout";
 import { useAuth } from "./context/AuthContext";
 import { useLanguage } from "./context/LanguageContext";
-import Register from "./pages/Register";
-import Landing from "./pages/Landing";
-import SupervisorInvitations from "./pages/SupervisorInvitations";
-import StudentInvitations from "./pages/StudentInvitations";
-import Profile from "./pages/Profile";
 import CustomThemeProvider from "./context/ThemeContext";
-import Users from "./pages/Users";
-import PendingApproval from "./pages/PendingApproval";
-import AccountBlocked from "./pages/AccountBlocked";
-import Universities from "./pages/Universities";
-import PlatformUsers from "./pages/PlatformUsers";
-import PlatformProjects from "./pages/PlatformProjects";
-import PlatformDashboard from "./pages/PlatformDashboard";
+
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Projects = lazy(() => import("./pages/Projects"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const ProjectDetails = lazy(() => import("./pages/ProjectDetails"));
+const SupervisorInvitations = lazy(() => import("./pages/SupervisorInvitations"));
+const StudentInvitations = lazy(() => import("./pages/StudentInvitations"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Users = lazy(() => import("./pages/Users"));
+const PendingApproval = lazy(() => import("./pages/PendingApproval"));
+const AccountBlocked = lazy(() => import("./pages/AccountBlocked"));
+const Universities = lazy(() => import("./pages/Universities"));
+const PlatformUsers = lazy(() => import("./pages/PlatformUsers"));
+const PlatformProjects = lazy(() => import("./pages/PlatformProjects"));
+const PlatformDashboard = lazy(() => import("./pages/PlatformDashboard"));
+
+/** Routes admins to tenant Users and super admins to PlatformUsers. */
 function UsersPage() {
   const { isSuperAdmin, user } = useAuth();
   const roleName = String(user?.role?.name || user?.role || "").toLowerCase();
@@ -34,11 +37,13 @@ function UsersPage() {
   return isSuperAdmin ? <PlatformUsers /> : <Users />;
 }
 
+/** Routes super admins to PlatformProjects; others to tenant Projects. */
 function ProjectsPage() {
   const { isSuperAdmin } = useAuth();
   return isSuperAdmin ? <PlatformProjects /> : <Projects />;
 }
 
+/** Full-screen spinner shown while the user profile loads. */
 function LoadingScreen() {
   const { t } = useLanguage();
   return (
@@ -60,6 +65,7 @@ function LoadingScreen() {
   );
 }
 
+/** Guards dashboard routes behind auth, status, and session checks. */
 function ProtectedRoute({ children }) {
   const { isAuthenticated, status, loadingProfile, sessionBlock } = useAuth();
 
@@ -82,24 +88,28 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+/** Restricts a route to platform super admins only. */
 function SuperAdminRoute({ children }) {
   const { isSuperAdmin } = useAuth();
   if (!isSuperAdmin) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
+/** Blocks super admins from tenant-only screens. */
 function TenantRoute({ children }) {
   const { isSuperAdmin } = useAuth();
   if (isSuperAdmin) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
+/** Picks the dashboard home view based on the user role. */
 function DashboardIndex() {
   const { isSuperAdmin } = useAuth();
   if (isSuperAdmin) return <PlatformDashboard />;
   return <Dashboard />;
 }
 
+/** Root router: public auth pages and protected dashboard routes. */
 export default function App() {
   return (
     <CustomThemeProvider>

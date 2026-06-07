@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import toast from "react-hot-toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import {
@@ -23,13 +24,68 @@ import {
   TextField,
   MenuItem,
   Alert,
+  IconButton,
+  Tooltip,
+  alpha,
 } from "@mui/material";
 import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
 import AdminPanelSettingsRoundedIcon from "@mui/icons-material/AdminPanelSettingsRounded";
+import SupervisorAccountRoundedIcon from "@mui/icons-material/SupervisorAccountRounded";
+import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
+import ShieldRoundedIcon from "@mui/icons-material/ShieldRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import HourglassBottomRoundedIcon from "@mui/icons-material/HourglassBottomRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
 import ListToolbar from "../components/ListToolbar";
 
+const USER_ROLE_STYLES = {
+  admin: {
+    color: "#7C3AED",
+    Icon: AdminPanelSettingsRoundedIcon,
+    labelKey: "platformUsers.universityAdmin",
+  },
+  supervisor: {
+    color: "#3B82F6",
+    Icon: SupervisorAccountRoundedIcon,
+    labelKey: "users.roleSupervisor",
+  },
+  student: {
+    color: "#14B8A6",
+    Icon: SchoolRoundedIcon,
+    labelKey: "users.roleStudent",
+  },
+  super_admin: {
+    color: "#0F172A",
+    Icon: ShieldRoundedIcon,
+    labelKey: "roles.super_admin",
+  },
+};
+
+const USER_STATUS_STYLES = {
+  active: {
+    color: "#10B981",
+    Icon: CheckCircleRoundedIcon,
+    labelKey: "users.statusActive",
+  },
+  pending: {
+    color: "#F59E0B",
+    Icon: HourglassBottomRoundedIcon,
+    labelKey: "users.statusPending",
+  },
+  rejected: {
+    color: "#EF4444",
+    Icon: CancelRoundedIcon,
+    labelKey: "users.statusRejected",
+  },
+};
+
+/** Platform admin page for managing users across universities. */
 export default function PlatformUsers() {
-  const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const { t } = useLanguage();
+  const { user: authUser, authHeaders, apiFetch, API_BASE_URL } = useAuth();
+  const currentUserId = Number(authUser?.user?.id ?? authUser?.id ?? 0);
 
   const [users, setUsers] = useState([]);
   const [universities, setUniversities] = useState([]);
@@ -63,9 +119,11 @@ export default function PlatformUsers() {
     onConfirm: null,
   });
   const [dialogLoading, setDialogLoading] = useState(false);
+  /** Closes the confirmation dialog. */
   const closeDialog = () =>
     setDialogConfig((p) => ({ ...p, isOpen: false }));
 
+  /** Loads universities for filter and form dropdowns. */
   const fetchUniversities = async () => {
     const { res, data } = await apiFetch(`${API_BASE_URL}/admin/universities`, {
       headers: authHeaders(),
@@ -78,6 +136,7 @@ export default function PlatformUsers() {
     return () => clearTimeout(t);
   }, [search]);
 
+  /** Fetches users with current search and filter params. */
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -92,7 +151,7 @@ export default function PlatformUsers() {
         `${API_BASE_URL}/admin/users${qs ? `?${qs}` : ""}`,
         { headers: authHeaders() },
       );
-      if (!res.ok) throw new Error(data?.message || "تعذر جلب المستخدمين");
+      if (!res.ok) throw new Error(data?.message || t("platformUsers.loadError"));
       setUsers(data?.users || []);
     } catch (e) {
       setError(e.message);
@@ -103,6 +162,7 @@ export default function PlatformUsers() {
 
   useEffect(() => {
     fetchUniversities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -110,9 +170,10 @@ export default function PlatformUsers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchDebounced, statusFilter, roleFilter, universityFilter]);
 
+  /** Creates a new platform user from the add dialog. */
   const handleCreate = async () => {
     if (!addData.name || !addData.email || !addData.university_id) {
-      return toast.error("الاسم والبريد والجامعة مطلوبة");
+      return toast.error(t("platformUsers.requiredFields"));
     }
     setSaving(true);
     try {
@@ -137,11 +198,11 @@ export default function PlatformUsers() {
         headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(data?.message || "تعذر إنشاء المستخدم");
+      if (!res.ok) throw new Error(data?.message || t("platformUsers.createError"));
       toast.success(
         addData.role === "admin"
-          ? "تم إنشاء مسؤول الجامعة بنجاح"
-          : "تم إنشاء المستخدم بنجاح",
+          ? t("platformUsers.adminCreated")
+          : t("platformUsers.userCreated"),
       );
       setOpenAdd(false);
       setAddData({
@@ -162,6 +223,7 @@ export default function PlatformUsers() {
     }
   };
 
+  /** Saves edits to an existing platform user. */
   const handleSaveEdit = async () => {
     if (!editData) return;
     setSaving(true);
@@ -190,8 +252,8 @@ export default function PlatformUsers() {
           body: JSON.stringify(body),
         },
       );
-      if (!res.ok) throw new Error(data?.message || "تعذر التحديث");
-      toast.success("تم تحديث المستخدم");
+      if (!res.ok) throw new Error(data?.message || t("platformUsers.updateError"));
+      toast.success(t("platformUsers.updated"));
       setEditData(null);
       fetchUsers();
     } catch (e) {
@@ -201,11 +263,35 @@ export default function PlatformUsers() {
     }
   };
 
+  /** Returns whether the current admin may delete the given user. */
+  const canDeleteUser = (user) => {
+    const roleName = String(user?.role?.name ?? "").toLowerCase();
+    if (roleName === "super_admin") return false;
+    if (currentUserId && Number(user?.id) === currentUserId) return false;
+    return true;
+  };
+
+  /** Returns the localized reason deletion is blocked, if any. */
+  const deleteBlockReason = (user) => {
+    const roleName = String(user?.role?.name ?? "").toLowerCase();
+    if (roleName === "super_admin") return t("platformUsers.cannotDeleteSuperAdmin");
+    if (currentUserId && Number(user?.id) === currentUserId) return t("platformUsers.cannotDeleteSelf");
+    return "";
+  };
+
+  /** Opens a confirm dialog and deletes the user on approval. */
   const handleDelete = (user) => {
+    if (!canDeleteUser(user)) {
+      return toast.error(deleteBlockReason(user));
+    }
+
     setDialogConfig({
       isOpen: true,
-      title: "حذف المستخدم؟",
-      content: `حذف "${user.name}" (${user.email}) نهائياً؟`,
+      title: t("platformUsers.deleteTitle"),
+      content: t("platformUsers.deleteContent", {
+        name: user.name,
+        email: user.email,
+      }),
       onConfirm: async () => {
         try {
           setDialogLoading(true);
@@ -213,8 +299,8 @@ export default function PlatformUsers() {
             `${API_BASE_URL}/admin/users/${user.id}`,
             { method: "DELETE", headers: authHeaders() },
           );
-          if (!res.ok) throw new Error(data?.message || "تعذر الحذف");
-          toast.success("تم الحذف");
+          if (!res.ok) throw new Error(data?.message || t("platformUsers.deleteError"));
+          toast.success(t("platformUsers.deleted"));
           fetchUsers();
           closeDialog();
         } catch (e) {
@@ -227,19 +313,50 @@ export default function PlatformUsers() {
     });
   };
 
-  const statusChip = (status) => {
-    const colors = {
-      active: "success",
-      pending: "warning",
-      rejected: "error",
-    };
+  /** Renders a styled chip from a key and style map. */
+  const renderStyledChip = (key, stylesMap, fallback) => {
+    const style = stylesMap[key];
+    const label = style ? t(style.labelKey) : fallback || key || "—";
+
+    if (!style) {
+      return (
+        <Chip
+          size="small"
+          variant="outlined"
+          label={label}
+          sx={{ fontWeight: 700 }}
+        />
+      );
+    }
+
+    const ChipIcon = style.Icon;
     return (
       <Chip
         size="small"
-        color={colors[status] || "default"}
-        label={status || "—"}
+        icon={<ChipIcon sx={{ fontSize: "15px !important" }} />}
+        label={label}
+        sx={{
+          fontWeight: 800,
+          bgcolor: alpha(style.color, 0.12),
+          color: style.color,
+          border: "1px solid",
+          borderColor: alpha(style.color, 0.32),
+          "& .MuiChip-icon": { color: style.color },
+        }}
       />
     );
+  };
+
+  /** Renders a role chip for a user row. */
+  const renderRoleChip = (roleName) => {
+    const key = String(roleName || "").toLowerCase();
+    return renderStyledChip(key, USER_ROLE_STYLES, t(`roles.${key}`, roleName));
+  };
+
+  /** Renders a status chip for a user row. */
+  const renderStatusChip = (status) => {
+    const key = String(status || "pending").toLowerCase();
+    return renderStyledChip(key, USER_STATUS_STYLES, status);
   };
 
   const activeUniversities = useMemo(
@@ -247,6 +364,7 @@ export default function PlatformUsers() {
     [universities],
   );
 
+  /** Formats university names for display in the users table. */
   const formatUniversities = (u) => {
     if (u.role?.name === "supervisor" && u.supervisor_universities?.length) {
       return u.supervisor_universities.map((uni) => uni.name).join("، ");
@@ -264,10 +382,10 @@ export default function PlatformUsers() {
       >
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 900 }}>
-            إدارة المستخدمين (المنصة)
+            {t("platformUsers.title")}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            إنشاء مسؤول لكل جامعة، تعديل أو حذف أي مستخدم
+            {t("platformUsers.subtitle")}
           </Typography>
         </Box>
         <Button
@@ -276,7 +394,7 @@ export default function PlatformUsers() {
           onClick={() => setOpenAdd(true)}
           sx={{ fontWeight: 800 }}
         >
-          إضافة مستخدم
+          {t("platformUsers.addUser")}
         </Button>
       </Stack>
 
@@ -289,34 +407,34 @@ export default function PlatformUsers() {
       <ListToolbar
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="بحث بالاسم، البريد، الرقم الجامعي..."
+        searchPlaceholder={t("platformUsers.searchPlaceholder")}
         onRefresh={fetchUsers}
         filters={[
           {
             key: "status",
-            label: "الحالة",
+            label: t("users.status"),
             value: statusFilter,
             onChange: setStatusFilter,
             options: [
-              { value: "active", label: "نشط" },
-              { value: "pending", label: "قيد الانتظار" },
-              { value: "rejected", label: "مرفوض" },
+              { value: "active", label: t("users.statusActive") },
+              { value: "pending", label: t("users.statusPending") },
+              { value: "rejected", label: t("users.statusRejected") },
             ],
           },
           {
             key: "role",
-            label: "الدور",
+            label: t("users.role"),
             value: roleFilter,
             onChange: setRoleFilter,
             options: [
-              { value: "admin", label: "مسؤول جامعة" },
-              { value: "supervisor", label: "مشرف" },
-              { value: "student", label: "طالب" },
+              { value: "admin", label: t("users.roleAdmin") },
+              { value: "supervisor", label: t("users.roleSupervisor") },
+              { value: "student", label: t("users.roleStudent") },
             ],
           },
           {
             key: "university",
-            label: "الجامعة",
+            label: t("common.university"),
             value: universityFilter,
             onChange: setUniversityFilter,
             options: universities.map((u) => ({
@@ -331,19 +449,22 @@ export default function PlatformUsers() {
         {loading ? (
           <Box sx={{ p: 4, textAlign: "center" }}>
             <CircularProgress />
+            <Typography sx={{ mt: 2, fontWeight: 700, color: "text.secondary" }}>
+              {t("common.loading")}
+            </Typography>
           </Box>
         ) : (
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>الاسم</TableCell>
-                  <TableCell>الرقم الجامعي</TableCell>
-                  <TableCell>البريد</TableCell>
-                  <TableCell>الدور</TableCell>
-                  <TableCell>الجامعة</TableCell>
-                  <TableCell>الحالة</TableCell>
-                  <TableCell align="right">إجراءات</TableCell>
+                  <TableCell>{t("platformUsers.colName")}</TableCell>
+                  <TableCell>{t("platformUsers.colStudentNumber")}</TableCell>
+                  <TableCell>{t("platformUsers.colEmail")}</TableCell>
+                  <TableCell>{t("platformUsers.colRole")}</TableCell>
+                  <TableCell>{t("platformUsers.colUniversity")}</TableCell>
+                  <TableCell>{t("platformUsers.colStatus")}</TableCell>
+                  <TableCell align="right">{t("platformUsers.colActions")}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -352,49 +473,53 @@ export default function PlatformUsers() {
                     <TableCell>{u.name}</TableCell>
                     <TableCell>{u.student_number || "—"}</TableCell>
                     <TableCell>{u.email}</TableCell>
-                    <TableCell>
-                      {u.role?.name === "admin" && (
-                        <Chip
-                          size="small"
-                          icon={<AdminPanelSettingsRoundedIcon />}
-                          label="مسؤول جامعة"
-                          color="primary"
-                        />
-                      )}
-                      {u.role?.name !== "admin" && (
-                        <Chip size="small" label={u.role?.name} />
-                      )}
-                    </TableCell>
+                    <TableCell>{renderRoleChip(u.role?.name)}</TableCell>
                     <TableCell>{formatUniversities(u)}</TableCell>
-                    <TableCell>{statusChip(u.status)}</TableCell>
+                    <TableCell>{renderStatusChip(u.status)}</TableCell>
                     <TableCell align="right">
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setEditData({
-                            id: u.id,
-                            name: u.name,
-                            email: u.email,
-                            role: u.role?.name || "student",
-                            status: u.status,
-                            university_id: u.university_id,
-                            university_ids: (u.supervisor_universities || []).map(
-                              (uni) => uni.id,
-                            ),
-                            student_number: u.student_number || "",
-                            password: "",
-                          })
-                        }
-                      >
-                        تعديل
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={() => handleDelete(u)}
-                      >
-                        حذف
-                      </Button>
+                      <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                        <Tooltip title={t("common.edit")}>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() =>
+                              setEditData({
+                                id: u.id,
+                                name: u.name,
+                                email: u.email,
+                                role: u.role?.name || "student",
+                                status: u.status,
+                                university_id: u.university_id,
+                                university_ids: (u.supervisor_universities || []).map(
+                                  (uni) => uni.id,
+                                ),
+                                student_number: u.student_number || "",
+                                password: "",
+                              })
+                            }
+                          >
+                            <EditRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip
+                          title={
+                            canDeleteUser(u)
+                              ? t("common.delete")
+                              : deleteBlockReason(u)
+                          }
+                        >
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              disabled={!canDeleteUser(u)}
+                              onClick={() => handleDelete(u)}
+                            >
+                              <DeleteOutlineRoundedIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -406,12 +531,12 @@ export default function PlatformUsers() {
 
       <Dialog open={openAdd} onClose={() => setOpenAdd(false)} fullWidth maxWidth="sm">
         <DialogTitle sx={{ fontWeight: 900 }}>
-          إضافة مستخدم (مسؤول جامعة أو غيره)
+          {t("platformUsers.addTitle")}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="الاسم"
+              label={t("users.name")}
               fullWidth
               value={addData.name}
               onChange={(e) =>
@@ -419,7 +544,7 @@ export default function PlatformUsers() {
               }
             />
             <TextField
-              label="البريد"
+              label={t("users.email")}
               fullWidth
               value={addData.email}
               onChange={(e) =>
@@ -427,7 +552,7 @@ export default function PlatformUsers() {
               }
             />
             <TextField
-              label="كلمة المرور"
+              label={t("auth.password")}
               type="password"
               fullWidth
               value={addData.password}
@@ -437,21 +562,21 @@ export default function PlatformUsers() {
             />
             <TextField
               select
-              label="الدور"
+              label={t("users.role")}
               fullWidth
               value={addData.role}
               onChange={(e) =>
                 setAddData((p) => ({ ...p, role: e.target.value }))
               }
             >
-              <MenuItem value="admin">مسؤول جامعة (Admin)</MenuItem>
-              <MenuItem value="supervisor">مشرف</MenuItem>
-              <MenuItem value="student">طالب</MenuItem>
+              <MenuItem value="admin">{t("users.roleAdmin")}</MenuItem>
+              <MenuItem value="supervisor">{t("users.roleSupervisor")}</MenuItem>
+              <MenuItem value="student">{t("users.roleStudent")}</MenuItem>
             </TextField>
             {addData.role === "supervisor" ? (
               <TextField
                 select
-                label="الجامعات (يمكن اختيار أكثر من واحدة)"
+                label={t("platformUsers.universitiesMulti")}
                 fullWidth
                 SelectProps={{ multiple: true }}
                 value={addData.university_ids}
@@ -473,7 +598,7 @@ export default function PlatformUsers() {
             ) : (
               <TextField
                 select
-                label="الجامعة"
+                label={t("common.university")}
                 fullWidth
                 value={addData.university_id}
                 onChange={(e) =>
@@ -481,7 +606,7 @@ export default function PlatformUsers() {
                 }
               >
                 <MenuItem value="" disabled>
-                  اختر الجامعة
+                  {t("platformUsers.chooseUniversity")}
                 </MenuItem>
                 {activeUniversities.map((uni) => (
                   <MenuItem key={uni.id} value={uni.id}>
@@ -492,7 +617,7 @@ export default function PlatformUsers() {
             )}
             {addData.role === "student" && (
               <TextField
-                label="الرقم الجامعي"
+                label={t("users.studentNumber")}
                 fullWidth
                 required
                 value={addData.student_number}
@@ -503,23 +628,23 @@ export default function PlatformUsers() {
             )}
             <TextField
               select
-              label="الحالة"
+              label={t("users.status")}
               fullWidth
               value={addData.status}
               onChange={(e) =>
                 setAddData((p) => ({ ...p, status: e.target.value }))
               }
             >
-              <MenuItem value="active">نشط</MenuItem>
-              <MenuItem value="pending">قيد الانتظار</MenuItem>
-              <MenuItem value="rejected">مرفوض</MenuItem>
+              <MenuItem value="active">{t("users.statusActive")}</MenuItem>
+              <MenuItem value="pending">{t("users.statusPending")}</MenuItem>
+              <MenuItem value="rejected">{t("users.statusRejected")}</MenuItem>
             </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenAdd(false)}>إلغاء</Button>
+          <Button onClick={() => setOpenAdd(false)}>{t("common.cancel")}</Button>
           <Button variant="contained" onClick={handleCreate} disabled={saving}>
-            {saving ? "جاري الحفظ..." : "إنشاء"}
+            {saving ? t("common.executing") : t("common.add")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -530,12 +655,12 @@ export default function PlatformUsers() {
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>تعديل مستخدم</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>{t("platformUsers.editTitle")}</DialogTitle>
         <DialogContent>
           {editData && (
             <Stack spacing={2} sx={{ mt: 1 }}>
               <TextField
-                label="الاسم"
+                label={t("users.name")}
                 fullWidth
                 value={editData.name}
                 onChange={(e) =>
@@ -543,7 +668,7 @@ export default function PlatformUsers() {
                 }
               />
               <TextField
-                label="البريد"
+                label={t("users.email")}
                 fullWidth
                 value={editData.email}
                 onChange={(e) =>
@@ -551,7 +676,7 @@ export default function PlatformUsers() {
                 }
               />
               <TextField
-                label="كلمة مرور جديدة (اختياري)"
+                label={t("platformUsers.newPasswordOptional")}
                 type="password"
                 fullWidth
                 value={editData.password}
@@ -561,21 +686,21 @@ export default function PlatformUsers() {
               />
               <TextField
                 select
-                label="الدور"
+                label={t("users.role")}
                 fullWidth
                 value={editData.role}
                 onChange={(e) =>
                   setEditData((p) => ({ ...p, role: e.target.value }))
                 }
               >
-                <MenuItem value="admin">مسؤول جامعة</MenuItem>
-                <MenuItem value="supervisor">مشرف</MenuItem>
-                <MenuItem value="student">طالب</MenuItem>
+                <MenuItem value="admin">{t("users.roleAdmin")}</MenuItem>
+                <MenuItem value="supervisor">{t("users.roleSupervisor")}</MenuItem>
+                <MenuItem value="student">{t("users.roleStudent")}</MenuItem>
               </TextField>
               {editData.role === "supervisor" ? (
                 <TextField
                   select
-                  label="الجامعات"
+                  label={t("platformUsers.universitiesMulti")}
                   fullWidth
                   SelectProps={{ multiple: true }}
                   value={editData.university_ids || []}
@@ -597,7 +722,7 @@ export default function PlatformUsers() {
               ) : (
                 <TextField
                   select
-                  label="الجامعة"
+                  label={t("common.university")}
                   fullWidth
                   value={editData.university_id}
                   onChange={(e) =>
@@ -616,7 +741,7 @@ export default function PlatformUsers() {
               )}
               {editData.role === "student" && (
                 <TextField
-                  label="الرقم الجامعي"
+                  label={t("users.studentNumber")}
                   fullWidth
                   value={editData.student_number || ""}
                   onChange={(e) =>
@@ -629,32 +754,36 @@ export default function PlatformUsers() {
               )}
               <TextField
                 select
-                label="الحالة"
+                label={t("users.status")}
                 fullWidth
                 value={editData.status}
                 onChange={(e) =>
                   setEditData((p) => ({ ...p, status: e.target.value }))
                 }
               >
-                <MenuItem value="active">نشط</MenuItem>
-                <MenuItem value="pending">قيد الانتظار</MenuItem>
-                <MenuItem value="rejected">مرفوض</MenuItem>
+                <MenuItem value="active">{t("users.statusActive")}</MenuItem>
+                <MenuItem value="pending">{t("users.statusPending")}</MenuItem>
+                <MenuItem value="rejected">{t("users.statusRejected")}</MenuItem>
               </TextField>
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditData(null)}>إلغاء</Button>
+          <Button onClick={() => setEditData(null)}>{t("common.cancel")}</Button>
           <Button variant="contained" onClick={handleSaveEdit} disabled={saving}>
-            حفظ
+            {saving ? t("common.executing") : t("common.save")}
           </Button>
         </DialogActions>
       </Dialog>
 
       <ConfirmDialog
-        {...dialogConfig}
-        dialogLoading={dialogLoading}
+        open={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        content={dialogConfig.content}
+        loading={dialogLoading}
         onClose={closeDialog}
+        onConfirm={dialogConfig.onConfirm}
+        confirmColor="error"
       />
     </Box>
   );

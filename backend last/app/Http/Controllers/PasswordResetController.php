@@ -19,6 +19,7 @@ class PasswordResetController extends Controller
     private const SUCCESS_MESSAGE =
         'إذا كان هناك حساب نشط مرتبط بهذا البريد، ستصلك رسالة خلال دقائق تحتوي رابط إعادة التعيين.';
 
+    /** Send a password reset link to the given email. */
     public function forgot(Request $request)
     {
         $request->validate(['email' => 'required|email']);
@@ -48,6 +49,7 @@ class PasswordResetController extends Controller
         ]);
     }
 
+    /** Reset the user's password using a valid token. */
     public function reset(Request $request)
     {
         $request->validate([
@@ -95,6 +97,7 @@ class PasswordResetController extends Controller
         ]);
     }
 
+    /** Attempt to send the password reset email via configured mailers. */
     private function sendResetEmail(User $user, string $resetUrl): void
     {
         $mailable = new PasswordResetMail($user->name, $resetUrl, self::EXPIRES_MINUTES);

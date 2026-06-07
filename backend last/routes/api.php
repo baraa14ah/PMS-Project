@@ -74,6 +74,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserHasUniversity:
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('/dashboard/badges', [DashboardController::class, 'badges']);
         Route::put('/profile/me', [ProfileController::class, 'update']);
+        Route::put('/profile/supervisor-availability', [ProfileController::class, 'updateSupervisorAvailability']);
         Route::post('/profile/unlink-github', [GitHubAuthController::class, 'unlink']);
 
         /*

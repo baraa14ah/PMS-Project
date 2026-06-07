@@ -15,11 +15,13 @@ class ProjectService
 {
     protected ProjectRepository $projects;
 
+    /** Injects the project repository dependency. */
     public function __construct(ProjectRepository $projects)
     {
         $this->projects = $projects;
     }
 
+    /** Creates a new project for the authenticated user. */
     public function create(Request $request): Project
     {
         $data = $request->validate([
@@ -36,12 +38,13 @@ class ProjectService
         return $this->projects->create($data);
     }
 
+    /** Returns all projects visible to the given user. */
     public function listForUser($user)
     {
         return $this->projects->getForUser($user);
     }
 
-    /** Projects for index API with progress in one query (no N+1). */
+    /** Returns projects for the index API with progress metrics attached. */
     public function listForIndex(User $user): Collection
     {
         $roleName = strtolower($user->role?->name ?? '');
@@ -66,6 +69,7 @@ class ProjectService
         return $this->attachProgressMetrics($projects);
     }
 
+    /** Attaches task progress metrics to each project in the collection. */
     public function attachProgressMetrics(Collection $projects): Collection
     {
         if ($projects->isEmpty()) {
@@ -98,6 +102,7 @@ class ProjectService
         });
     }
 
+    /** Updates a project if the user is authorized. */
     public function update(Request $request, int $id, $user)
     {
         $project = $this->projects->findById($id);
@@ -125,6 +130,7 @@ class ProjectService
         return $this->projects->update($project, $data);
     }
 
+    /** Deletes a project if the user is authorized. */
     public function delete(int $id, $user)
     {
         $project = $this->projects->findById($id);
@@ -144,6 +150,7 @@ class ProjectService
         return true;
     }
 
+    /** Returns task progress stats and auto-updates project status. */
     public function progress(int $id): ?array
     {
         $project = Project::query()->with('tasks')->whereKey($id)->first();
@@ -161,7 +168,6 @@ class ProjectService
             ? round(($completedTasks / $totalTasks) * 100, 2)
             : 0;
 
-        // 💡 التعديل السحري: تحديث حالة المشروع في الداتا بيز تلقائياً!
         $newStatus = 'pending';
         if ($totalTasks > 0 && $completedTasks === $totalTasks) {
             $newStatus = 'completed';
@@ -169,7 +175,6 @@ class ProjectService
             $newStatus = 'in_progress';
         }
 
-        // إذا تغيرت الحالة، احفظها في قاعدة البيانات فوراً (تتخطى مشاكل الصلاحيات)
         if ($project->status !== $newStatus) {
             $project->status = $newStatus;
             $project->save();
@@ -184,6 +189,8 @@ class ProjectService
             'progress_percentage' => $progress,
         ];
     }
+
+    /** Returns a project with all related details loaded. */
     public function getProjectFullDetails(int $id)
     {
         return Project::query()->with([
@@ -196,16 +203,13 @@ class ProjectService
         ])->whereKey($id)->first();
     }
 
-    // ✅ الدالة المفقودة 2: حساب التقدم (لأن الكنترولر يطلبها بهذا الاسم)
+    /** Delegates to progress() for controller compatibility. */
     public function calculateProgress(int $id): ?array
     {
         return $this->progress($id);
     }
-    // ✅ دالة جلب الطلاب المتاحين للدعوة (المنطق البرمجي)
-    /**
-     * جلب الطلاب المتاحين للدعوة فقط
-     * (يستبعد المالك، ويستبعد الأعضاء الحاليين في المشروع)
-     */
+
+    /** Returns students eligible for invitation to a project. */
     public function getAvailableStudentsForInvite(int $projectId, ?string $search = null)
     {
         $students = app(StudentService::class)->getAvailableStudents($projectId, $search);

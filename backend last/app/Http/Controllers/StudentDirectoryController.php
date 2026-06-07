@@ -11,11 +11,13 @@ class StudentDirectoryController extends Controller
 {
     protected StudentService $studentService;
 
+    /** Initialize the controller with student service dependency. */
     public function __construct(StudentService $studentService)
     {
         $this->studentService = $studentService;
     }
 
+    /** Check whether the user can access the project. */
     private function canAccess(Request $request, Project $project): bool
     {
         $u = $request->user();
@@ -32,9 +34,7 @@ class StudentDirectoryController extends Controller
                 ->exists();
     }
 
-    /**
-     * عرض أعضاء المشروع
-     */
+    /** Return owner and members for a project. */
     public function studentsForProject(Request $request, $id)
     {
         $project = Project::query()->whereKey($id)->first();

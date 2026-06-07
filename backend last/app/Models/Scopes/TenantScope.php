@@ -15,23 +15,19 @@ use Illuminate\Database\Eloquent\Scope;
  */
 class TenantScope implements Scope
 {
-    /**
-     * Apply the scope to a given Eloquent query builder.
-     */
+    /** Restricts queries to the authenticated user's university, or none if unscoped. */
     public function apply(Builder $builder, Model $model): void
     {
-        // Unauthenticated requests are intentionally unscoped (e.g. register email lookup).
         if (auth()->check()) {
-            if (auth()->user()->role === 'super_admin') {   
+            if (auth()->user()->role === 'super_admin') {
                 return;
             }
 
             $universityId = auth()->user()->university_id;
-            
+
             if ($universityId) {
                 $builder->where($model->getTable() . '.university_id', $universityId);
             } else {
-                // If auth user has no university_id: no rows (FR-002)
                 $builder->whereRaw('1 = 0');
             }
         }

@@ -2,88 +2,161 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Project;
+use App\Models\University;
 use App\Models\User;
-use App\Models\Project; // 🎯 استدعاء مودل المشاريع
+use App\Services\NotificationService;
+use App\Services\UserDeletionService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB; // 🎯 استدعاء DB للتعامل مع العمليات (Transactions) والجداول الوسيطة
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+
 class UserController extends Controller
 {
-    // جلب كل المستخدمين
-    public function index(Request $request)
+    /** Initialize the controller with notification service. */
+    public function __construct(private NotificationService $notificationService)
     {
-        $query = User::query()
-            ->with(['role', 'supervisorUniversities:id,name'])
-            ->forTenantAdminListing()
-            ->applyUserListFilters($request)
-            ->orderBy('created_at', 'desc');
-
-        $users = $query->get();
-
-        return response()->json([
-            'users' => $users
-        ], 200);
     }
 
-    // List pending users for admin (US2)
-    public function pending(Request $request)
+    /** List all users for the tenant admin. */
+    public function index(Request $request)
     {
+        $adminUni = auth()->user()->university_id;
+
         $users = User::query()
             ->with(['role', 'supervisorUniversities:id,name'])
             ->forTenantAdminListing()
-            ->where('status', 'pending')
+            ->applyUserListFilters($request)
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(fn (User $user) => $this->enrichUserForAdmin($user, $adminUni));
 
         return response()->json([
-            'users' => $users
+            'users' => $users,
         ], 200);
     }
 
-    // Approve a pending user (US2)
+    /** List users pending approval for the tenant admin. */
+    public function pending(Request $request)
+    {
+        $adminUni = auth()->user()->university_id;
+
+        $users = User::query()
+            ->with(['role', 'supervisorUniversities:id,name'])
+            ->forTenantAdminListing()
+            ->applyUserListFilters($request->merge(['status' => 'pending']))
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn (User $user) => $this->enrichUserForAdmin($user, $adminUni));
+
+        return response()->json([
+            'users' => $users,
+        ], 200);
+    }
+
+    /** Approve a pending user account. */
     public function approve($id)
     {
-        $user = User::query()->forTenantAdminListing()->whereKey($id)->first();
+        $admin = auth()->user();
+        $adminUni = (int) $admin->university_id;
+
+        $user = User::query()
+            ->with('role')
+            ->forTenantAdminListing()
+            ->whereKey($id)
+            ->first();
 
         if (!$user) {
             return response()->json(['message' => 'User not found in your university.'], 404);
         }
 
-        if ($user->status !== 'pending') {
-            return response()->json(['message' => 'User is not pending approval.'], 422);
-        }
+        if ($user->isSupervisorRole()) {
+            $updated = DB::table('supervisor_universities')
+                ->where('user_id', $user->id)
+                ->where('university_id', $adminUni)
+                ->where('status', 'pending')
+                ->update([
+                    'status'      => 'active',
+                    'approved_at' => now(),
+                    'approved_by' => $admin->id,
+                ]);
 
-        $user->status = 'active';
-        $user->save();
+            if (!$updated) {
+                return response()->json(['message' => 'User is not pending approval for your university.'], 422);
+            }
+
+            $user->refreshAccountStatusFromMemberships();
+            $this->notifySupervisorMembershipDecision($user, $adminUni, 'approved');
+        } else {
+            if ($user->status !== 'pending') {
+                return response()->json(['message' => 'User is not pending approval.'], 422);
+            }
+
+            $user->status = 'active';
+            $user->save();
+            $this->notificationService->notifyUser(
+                $user,
+                'account.approved',
+                'تم قبول انضمامك',
+                'تم اعتماد حسابك — يمكنك الآن استخدام المنصة.',
+                ['url' => '/dashboard'],
+            );
+        }
 
         return response()->json([
             'message' => 'User approved successfully.',
-            'user' => $user->load('role')
+            'user'    => $this->enrichUserForAdmin($user->fresh()->load('role'), $adminUni),
         ], 200);
     }
 
-    // Reject a pending user (US2)
+    /** Reject a pending user account. */
     public function reject($id)
     {
-        $user = User::query()->forTenantAdminListing()->whereKey($id)->first();
+        $admin = auth()->user();
+        $adminUni = (int) $admin->university_id;
+
+        $user = User::query()
+            ->with('role')
+            ->forTenantAdminListing()
+            ->whereKey($id)
+            ->first();
 
         if (!$user) {
             return response()->json(['message' => 'User not found in your university.'], 404);
         }
 
-        if ($user->status !== 'pending') {
-            return response()->json(['message' => 'User is not pending approval.'], 422);
-        }
+        if ($user->isSupervisorRole()) {
+            $updated = DB::table('supervisor_universities')
+                ->where('user_id', $user->id)
+                ->where('university_id', $adminUni)
+                ->where('status', 'pending')
+                ->update([
+                    'status'      => 'rejected',
+                    'approved_at' => null,
+                    'approved_by' => $admin->id,
+                ]);
 
-        $user->status = 'rejected';
-        $user->save();
+            if (!$updated) {
+                return response()->json(['message' => 'User is not pending approval for your university.'], 422);
+            }
+
+            $user->refreshAccountStatusFromMemberships();
+            $this->notifySupervisorMembershipDecision($user, $adminUni, 'rejected');
+        } else {
+            if ($user->status !== 'pending') {
+                return response()->json(['message' => 'User is not pending approval.'], 422);
+            }
+
+            $user->status = 'rejected';
+            $user->save();
+        }
 
         return response()->json([
             'message' => 'User rejected successfully.',
-            'user' => $user->load('role')
+            'user'    => $this->enrichUserForAdmin($user->fresh()->load('role'), $adminUni),
         ], 200);
     }
-    // 🎯 دالة إضافة مستخدم جديد
+
+    /** Create a new supervisor or student user. */
     public function store(Request $request)
     {
         $rules = [
@@ -104,14 +177,12 @@ class UserController extends Controller
 
         $request->validate($rules);
 
-        // نجلب الـ id الخاص بالصلاحية المطلوبة (بناءً على جدول الأدوار لديك)
         $role = \App\Models\Role::where('name', $request->role)->first();
-        
+
         if (!$role) {
             return response()->json(['message' => 'حدث خطأ: الصلاحية المحددة غير موجودة في النظام'], 400);
         }
 
-        // إنشاء المستخدم
         $user = User::create([
             'name'           => $request->name,
             'email'          => $request->email,
@@ -130,18 +201,18 @@ class UserController extends Controller
         }
 
         if ($user->isSupervisorRole()) {
-            $user->syncSupervisorUniversities([auth()->user()->university_id]);
+            $user->syncSupervisorUniversities([auth()->user()->university_id], 'active', auth()->id());
         }
 
-        $user->load(['role', 'supervisorUniversities:id,name']);
+        $adminUni = auth()->user()->university_id;
 
         return response()->json([
             'message' => 'تم إضافة المستخدم بنجاح',
-            'user' => $user
+            'user'    => $this->enrichUserForAdmin($user->load(['role', 'supervisorUniversities:id,name']), $adminUni),
         ], 201);
     }
 
-    // دالة تعديل بيانات المستخدم
+    /** Update a user's name and email. */
     public function update(Request $request, $id)
     {
         $user = User::query()->forTenantAdminListing()->whereKey($id)->first();
@@ -161,122 +232,108 @@ class UserController extends Controller
         return response()->json(['message' => 'تم تحديث البيانات بنجاح']);
     }
 
-    // 🎯 دالة حذف المستخدم مع "نقل الملكية السلس" أو "الحذف الآمن"
-    public function destroy($id)
+    /** Delete a user from the tenant. */
+    public function destroy($id, UserDeletionService $deletionService)
     {
-        DB::beginTransaction();
+        $user = User::query()
+            ->with('role')
+            ->forTenantAdminListing()
+            ->whereKey($id)
+            ->first();
 
-        try {
-            $user = User::query()
-                ->with('role')
-                ->forTenantAdminListing()
-                ->whereKey($id)
-                ->first();
-
-            if (!$user) {
-                return response()->json(['message' => 'المستخدم غير موجود في جامعتك.'], 404);
-            }
-
-            $roleName = strtolower($user->role->name ?? '');
-            if (in_array($roleName, ['admin', 'super_admin'], true)) {
-                return response()->json(['message' => 'لا يمكن حذف حساب مدير النظام.'], 403);
-            }
-
-            $uniId = (int) $user->university_id;
-
-            // 1. مشاريع يملكها — نقل الملكية أو حذف المشروع
-            $ownedProjects = Project::query()
-                ->when($uniId, fn ($q) => $q->where('university_id', $uniId))
-                ->where('user_id', $id)
-                ->get();
-
-            foreach ($ownedProjects as $project) {
-                $otherMember = DB::table('project_members')
-                    ->where('project_id', $project->id)
-                    ->where('student_id', '!=', $id)
-                    ->where('status', 'accepted')
-                    ->orderBy('created_at')
-                    ->first();
-
-                if ($otherMember) {
-                    $project->user_id = $otherMember->student_id;
-                    $project->save();
-                    DB::table('project_members')
-                        ->where('project_id', $project->id)
-                        ->where('student_id', $otherMember->student_id)
-                        ->delete();
-                } else {
-                    DB::table('project_members')->where('project_id', $project->id)->delete();
-                    DB::table('student_invitations')->where('project_id', $project->id)->delete();
-                    DB::table('supervisor_invitations')->where('project_id', $project->id)->delete();
-                    $project->delete();
-                }
-            }
-
-            // 2. فك الارتباطات المباشرة
-            DB::table('project_members')->where('student_id', $id)->delete();
-            DB::table('tasks')->where('assigned_to', $id)->update(['assigned_to' => null]);
-            Project::query()->where('supervisor_id', $id)->update(['supervisor_id' => null]);
-            DB::table('supervisor_universities')->where('user_id', $id)->delete();
-            DB::table('project_user')->where('user_id', $id)->delete();
-
-            DB::table('student_invitations')
-                ->where('student_id', $id)
-                ->orWhere('sent_by_id', $id)
-                ->delete();
-            DB::table('supervisor_invitations')
-                ->where('supervisor_id', $id)
-                ->orWhere('student_id', $id)
-                ->delete();
-
-            DB::table('comments')->where('user_id', $id)->delete();
-            DB::table('project_versions')->where('user_id', $id)->delete();
-            DB::table('project_activities')->where('user_id', $id)->delete();
-            DB::table('ratings')->where('user_id', $id)->delete();
-            DB::table('password_reset_requests')->where('user_id', $id)->delete();
-
-            DB::table('notifications')
-                ->where('notifiable_type', User::class)
-                ->where('notifiable_id', $id)
-                ->delete();
-
-            DB::table('personal_access_tokens')
-                ->where('tokenable_type', User::class)
-                ->where('tokenable_id', $id)
-                ->delete();
-
-            $user->delete();
-
-            DB::commit();
-            return response()->json(['message' => 'تم حذف المستخدم بنجاح.']);
-
-        } catch (\Illuminate\Database\QueryException $e) {
-            DB::rollBack();
-            return response()->json([
-                'message' => 'تعذر الحذف — يوجد ارتباط في قاعدة البيانات: ' . $e->getMessage(),
-            ], 400);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['message' => 'تعذر حذف المستخدم: ' . $e->getMessage()], 500);
+        if (!$user) {
+            return response()->json(['message' => 'المستخدم غير موجود في جامعتك.'], 404);
         }
+
+        $roleName = strtolower($user->role->name ?? '');
+        if (in_array($roleName, ['admin', 'super_admin'], true)) {
+            return response()->json(['message' => 'لا يمكن حذف حساب مدير النظام.'], 403);
+        }
+
+        $result = $deletionService->delete($user);
+
+        return response()->json(['message' => $result['message']], $result['status']);
     }
- 
-    // جلب المشرفين
+
+    /** List active supervisors accepting supervision. */
     public function supervisors(Request $request)
     {
         if (!$request->user()) {
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
+        $adminUni = $request->user()->university_id;
+
         $supervisors = User::query()
             ->whereHas('role', function ($q) {
                 $q->where('name', 'supervisor');
             })
-            ->inUniversity($request->user()->university_id)
+            ->where('status', 'active')
+            ->whereHas('supervisorUniversities', function ($q) use ($adminUni) {
+                $q->where('universities.id', $adminUni)
+                    ->where('supervisor_universities.status', 'active')
+                    ->where('supervisor_universities.accepting_supervision', true);
+            })
             ->select('id', 'name', 'email')
             ->orderBy('name')
             ->get();
 
         return response()->json(['supervisors' => $supervisors]);
+    }
+
+    /** Enrich user model with admin-specific membership data. */
+    private function enrichUserForAdmin(User $user, ?int $adminUni): User
+    {
+        $user->membership_status = $user->membershipStatusForUniversity($adminUni);
+
+        if ($user->isSupervisorRole()) {
+            $user->supervisor_university_names = $user->supervisorUniversities
+                ->pluck('name')
+                ->values()
+                ->all();
+
+            if ($adminUni) {
+                $user->supervised_students_count = (int) Project::query()
+                    ->where('supervisor_id', $user->id)
+                    ->where('university_id', $adminUni)
+                    ->distinct('user_id')
+                    ->count('user_id');
+            }
+        }
+
+        return $user;
+    }
+
+    /** Notify a supervisor of membership approval or rejection. */
+    private function notifySupervisorMembershipDecision(User $user, int $universityId, string $decision): void
+    {
+        $uniName = University::whereKey($universityId)->value('name') ?? '';
+
+        if ($decision === 'approved') {
+            $this->notificationService->notifyUser(
+                $user,
+                'supervisor.membership_approved',
+                'تم قبولك كمشرف',
+                "تم اعتماد انضمامك كمشرف في {$uniName}.",
+                [
+                    'url'             => '/dashboard/profile',
+                    'university_id'   => $universityId,
+                    'university_name' => $uniName,
+                ],
+            );
+            return;
+        }
+
+        $this->notificationService->notifyUser(
+            $user,
+            'supervisor.membership_rejected',
+            'تم رفض طلب الإشراف',
+            "لم يتم قبول طلبك كمشرف في {$uniName}.",
+            [
+                'url'             => '/dashboard/profile',
+                'university_id'   => $universityId,
+                'university_name' => $uniName,
+            ],
+        );
     }
 }
