@@ -18,6 +18,12 @@ class Task extends Model
         'project_id',
         'assigned_to',
         'university_id',
+        'estimated_hours',
+        'ai_generated',
+    ];
+
+    protected $casts = [
+        'ai_generated' => 'boolean',
     ];
 
     /** Syncs university_id from the related project on create and update. */
@@ -52,5 +58,17 @@ class Task extends Model
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** Scope to AI-generated tasks only. */
+    public function scopeAiGenerated($query)
+    {
+        return $query->where('ai_generated', true);
+    }
+
+    /** Scope to manually created tasks only. */
+    public function scopeManual($query)
+    {
+        return $query->where('ai_generated', false);
     }
 }

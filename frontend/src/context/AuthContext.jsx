@@ -11,7 +11,9 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [user, setUser] = useState(null);
-  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(
+    () => Boolean(localStorage.getItem("token")),
+  );
   const [status, setStatus] = useState(null);
   const [role, setRole] = useState(null);
   const [universityId, setUniversityId] = useState(null);
@@ -38,19 +40,15 @@ export function AuthProvider({ children }) {
 
   /** Maps `/profile` response into context state. */
   const applyProfileData = (data) => {
+    const roleName =
+      typeof data?.user?.role === "string"
+        ? data.user.role
+        : data?.user?.role?.name || data?.role?.name || "";
+
     setUser(data);
     setStatus(data?.user?.status || null);
-    setRole(
-      typeof data?.role === "string"
-        ? data.role
-        : data?.role?.name || null,
-    );
+    setRole(roleName || null);
     setUniversityId(data?.user?.university_id ?? null);
-
-    const roleName =
-      typeof data?.role === "string"
-        ? data.role
-        : data?.role?.name || data?.user?.role?.name || "";
     const activeSupervisorUnis =
       data?.user?.active_supervisor_university_names || [];
     const supervisorMemberships = data?.user?.supervisor_memberships || [];
@@ -72,7 +70,11 @@ export function AuthProvider({ children }) {
     setUniversityName(resolvedUniversityName);
     setSessionBlock(null);
 
-    if (data?.user && data.user.university_id == null) {
+    if (
+      data?.user &&
+      data.user.university_id == null &&
+      roleName !== "super_admin"
+    ) {
       setSessionBlock("no_university");
     }
   };
@@ -113,12 +115,16 @@ export function AuthProvider({ children }) {
         return true;
       }
 
-      invalidateSession();
+      if (res.status === 401) {
+        invalidateSession();
+        setLoadingProfile(false);
+        return false;
+      }
+
       setLoadingProfile(false);
       return false;
     } catch (error) {
       console.error("Error fetching profile:", error);
-      invalidateSession();
       setLoadingProfile(false);
       return false;
     }

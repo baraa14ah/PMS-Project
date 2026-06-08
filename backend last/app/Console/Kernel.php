@@ -10,6 +10,13 @@ class Kernel extends ConsoleKernel
     /** Define the application's scheduled command tasks. */
     protected function schedule(Schedule $schedule): void
     {
+        $schedule->call(function () {
+            if (class_exists(\App\Models\IdeationRequest::class)) {
+                \App\Models\IdeationRequest::where('created_at', '<', now()->subDays(90))->delete();
+            }
+
+            \App\Models\TaskGenerationLog::where('created_at', '<', now()->subDays(90))->delete();
+        })->daily()->description('Purge old AI request logs');
     }
 
     /** Register console commands and route closures. */

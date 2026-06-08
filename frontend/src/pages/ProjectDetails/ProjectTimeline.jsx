@@ -21,7 +21,13 @@ import { useLanguage } from "../../context/LanguageContext";
 import { resolveActivityText } from "../../utils/activityText";
 import ProjectSectionShell from "../../components/ProjectSectionShell";
 
-const TASK_KEYS = new Set(["taskCreated", "taskStatusChanged", "taskDeleted"]);
+const TASK_KEYS = new Set([
+  "taskCreated",
+  "taskStatusChanged",
+  "taskDeleted",
+  "tasksAiGenerated",
+  "tasksAiRegenerated",
+]);
 const VERSION_KEYS = new Set([
   "versionUploaded",
   "versionDeleted",

@@ -99,4 +99,16 @@ class User extends Authenticatable
     {
         return $this->hasOne(UserProfile::class);
     }
+
+    /** Returns AI ideation bookmarks saved by this student. */
+    public function bookmarkedIdeas()
+    {
+        return $this->hasMany(BookmarkedIdea::class);
+    }
+
+    /** Returns AI ideation request logs for this student. */
+    public function ideationRequests()
+    {
+        return $this->hasMany(IdeationRequest::class);
+    }
 }

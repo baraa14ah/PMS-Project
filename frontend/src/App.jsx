@@ -26,6 +26,7 @@ const Universities = lazy(() => import("./pages/Universities"));
 const PlatformUsers = lazy(() => import("./pages/PlatformUsers"));
 const PlatformProjects = lazy(() => import("./pages/PlatformProjects"));
 const PlatformDashboard = lazy(() => import("./pages/PlatformDashboard"));
+const ProjectIdeation = lazy(() => import("./pages/ProjectIdeation"));
 
 /** Routes admins to tenant Users and super admins to PlatformUsers. */
 function UsersPage() {
@@ -102,6 +103,13 @@ function TenantRoute({ children }) {
   return children;
 }
 
+/** Restricts a route to students only. */
+function StudentRoute({ children }) {
+  const { role } = useAuth();
+  if (role !== "student") return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 /** Picks the dashboard home view based on the user role. */
 function DashboardIndex() {
   const { isSuperAdmin } = useAuth();
@@ -164,6 +172,16 @@ export default function App() {
             element={
               <TenantRoute>
                 <StudentInvitations />
+              </TenantRoute>
+            }
+          />
+          <Route
+            path="ideation"
+            element={
+              <TenantRoute>
+                <StudentRoute>
+                  <ProjectIdeation />
+                </StudentRoute>
               </TenantRoute>
             }
           />

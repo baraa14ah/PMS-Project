@@ -2,6 +2,7 @@
 
 namespace App\Models\Scopes;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
@@ -18,18 +19,27 @@ class TenantScope implements Scope
     /** Restricts queries to the authenticated user's university, or none if unscoped. */
     public function apply(Builder $builder, Model $model): void
     {
-        if (auth()->check()) {
-            if (auth()->user()->role === 'super_admin') {
-                return;
-            }
+        if (!auth()->check()) {
+            return;
+        }
 
-            $universityId = auth()->user()->university_id;
+        $user = auth()->user();
+        if (!$user instanceof User) {
+            return;
+        }
 
-            if ($universityId) {
-                $builder->where($model->getTable() . '.university_id', $universityId);
-            } else {
-                $builder->whereRaw('1 = 0');
-            }
+        $user->loadMissing('role');
+
+        if ($user->isSuperAdmin()) {
+            return;
+        }
+
+        $universityId = $user->university_id;
+
+        if ($universityId) {
+            $builder->where($model->getTable() . '.university_id', $universityId);
+        } else {
+            $builder->whereRaw('1 = 0');
         }
     }
 }

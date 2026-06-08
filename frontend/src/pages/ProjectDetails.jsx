@@ -174,6 +174,17 @@ export default function ProjectDetails() {
     currentRole === "admin" || (project && currentUserId === project.user_id);
   const showInvitesTab = canInviteSupervisor || canManageProject;
 
+  const canGenerateAiTasks = useMemo(() => {
+    if (currentRole !== "student" || !project || !currentUserId) return false;
+    if (currentUserId === project.user_id) return true;
+    if (!Array.isArray(project.members)) return false;
+    return project.members.some((m) => {
+      const memberId = m.id ?? m.student_id;
+      const status = m.pivot?.status ?? m.status;
+      return memberId === currentUserId && status === "accepted";
+    });
+  }, [currentRole, project, currentUserId]);
+
   const tabDefs = useMemo(() => {
     const defs = [
       {
@@ -673,6 +684,8 @@ export default function ProjectDetails() {
         {activeTabId === "tasks" && (
           <TasksTab
             projectId={project.id}
+            projectDescription={project?.description}
+            showAiGenerate={canGenerateAiTasks}
             tasks={tasks}
             setTasks={setTasks}
             updateProgressLocally={updateProgressLocally}

@@ -83,6 +83,21 @@ export function resolveActivityText(activity, t) {
       key: "githubPushed",
       pick: (m) => ({ title: m[1] }),
     },
+    {
+      re: /^قام بتوليد (\d+) مهمة للمشروع بالذكاء الاصطناعي$/,
+      key: "tasksAiGenerated",
+      pick: (m) => ({ count: m[1] }),
+    },
+    {
+      re: /^قام بإعادة توليد (\d+) مهمة للمشروع بالذكاء الاصطناعي$/,
+      key: "tasksAiRegenerated",
+      pick: (m) => ({ count: m[1] }),
+    },
+    {
+      re: /^ولّد (\d+) مهام بالذكاء الاصطناعي$/,
+      key: "tasksAiGenerated",
+      pick: (m) => ({ count: m[1] }),
+    },
   ];
 
   for (const { re, key, pick } of patterns) {

@@ -19,6 +19,8 @@ use App\Http\Controllers\UniversityController;
 use App\Http\Controllers\PlatformAdminController;
 use App\Http\Controllers\PasswordResetHelpController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AIIdeationController;
+use App\Http\Controllers\AITaskController;
 
 /*
 |--------------------------------------------------------------------------
@@ -197,5 +199,21 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserHasUniversity:
         Route::get('/student/invitations', [StudentInvitationController::class, 'myInvitations']);
         Route::post('/student/invitations/{inviteId}/accept', [StudentInvitationController::class, 'accept']);
         Route::post('/student/invitations/{inviteId}/reject', [StudentInvitationController::class, 'reject']);
+
+        /*
+        |--------------------------------------------------------------------------
+        | AI Project Ideation (Students only)
+        |--------------------------------------------------------------------------
+        */
+        Route::middleware(['role:student'])->prefix('ai')->group(function () {
+            Route::post('/suggest-projects', [AIIdeationController::class, 'suggest'])
+                ->middleware('throttle:ai-ideation');
+            Route::post('/bookmarks', [AIIdeationController::class, 'storeBookmark']);
+            Route::get('/bookmarks', [AIIdeationController::class, 'listBookmarks']);
+            Route::delete('/bookmarks/{id}', [AIIdeationController::class, 'deleteBookmark']);
+        });
+
+        Route::middleware(['role:student', 'throttle:ai-tasks'])
+            ->post('/projects/{project}/generate-tasks', [AITaskController::class, 'generate']);
     });
 });

@@ -54,8 +54,13 @@ import { ROLE_THEMES } from "../config/roleTheme";
 /** Admin user management page with approval and password requests. */
 export default function Users() {
   const { dir, t } = useLanguage();
-  const { token, user: currentUser, authHeaders, apiFetch, API_BASE_URL } =
-    useAuth();
+  const {
+    token,
+    user: currentUser,
+    authHeaders,
+    apiFetch,
+    API_BASE_URL,
+  } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const jsonHeaders = useMemo(
@@ -114,6 +119,16 @@ export default function Users() {
   const closeDialog = () =>
     setDialogConfig((prev) => ({ ...prev, isOpen: false }));
 
+  /** Resolves the universities column label for a user row. */
+  const universityLabel = (u) => {
+    const roleName = String(u.role?.name || u.role).toLowerCase();
+    if (roleName === "supervisor") {
+      const names = u.supervisor_university_names || [];
+      if (names.length > 0) return names.join("، ");
+    }
+    return u.university_name || u.university?.name || "—";
+  };
+
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search), 400);
     return () => clearTimeout(t);
@@ -135,8 +150,7 @@ export default function Users() {
       const { res, data } = await apiFetch(url, {
         headers: jsonHeaders,
       });
-      if (!res.ok)
-        throw new Error(data?.message || t("users.loadError"));
+      if (!res.ok) throw new Error(data?.message || t("users.loadError"));
       setUsers(data?.users || data?.data || []);
     } catch (err) {
       setError(err.message);
@@ -184,7 +198,9 @@ export default function Users() {
 
   useEffect(() => {
     if (!token || !isAdmin) return;
-    apiFetch(`${API_BASE_URL}/password-reset-requests`, { headers: jsonHeaders })
+    apiFetch(`${API_BASE_URL}/password-reset-requests`, {
+      headers: jsonHeaders,
+    })
       .then(({ res, data }) => {
         if (res.ok) setPasswordRequests(data?.requests || []);
       })
@@ -231,9 +247,7 @@ export default function Users() {
           );
           if (!res.ok) {
             const msg =
-              data?.errors?.request?.[0] ||
-              data?.message ||
-              t("common.error");
+              data?.errors?.request?.[0] || data?.message || t("common.error");
             throw new Error(msg);
           }
           closeDialog();
@@ -479,7 +493,8 @@ export default function Users() {
                 ? {
                     ...u,
                     status: rejected?.status ?? "rejected",
-                    membership_status: rejected?.membership_status ?? "rejected",
+                    membership_status:
+                      rejected?.membership_status ?? "rejected",
                   }
                 : u,
             ),
@@ -535,14 +550,14 @@ export default function Users() {
   const roleChip = (roleName) => {
     const role = String(roleName || "").toLowerCase();
     const theme = ROLE_THEMES[role];
-    
+
     const roleLabelMap = {
       student: t("users.roleStudent"),
       supervisor: t("users.roleSupervisor"),
       admin: t("users.roleAdmin"),
       super_admin: t("roles.super_admin"),
     };
-    
+
     if (theme) {
       const RoleIcon = theme.icon;
       return (
@@ -559,8 +574,14 @@ export default function Users() {
         />
       );
     }
-    
-    return <Chip size="small" variant="outlined" label={role || t("users.roleUnknown")} />;
+
+    return (
+      <Chip
+        size="small"
+        variant="outlined"
+        label={role || t("users.roleUnknown")}
+      />
+    );
   };
 
   const isPasswordTab = currentTab === "password_requests";
@@ -706,24 +727,24 @@ export default function Users() {
       </Box>
 
       {!isPasswordTab && (
-      <ListToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder={t("users.searchPlaceholder")}
-        onRefresh={() => fetchUsers()}
-        filters={[
-          {
-            key: "role",
-            label: t("users.roleFilter"),
-            value: roleFilter,
-            onChange: setRoleFilter,
-            options: [
-              { value: "student", label: t("users.roleStudent") },
-              { value: "supervisor", label: t("users.roleSupervisor") },
-            ],
-          },
-        ]}
-      />
+        <ListToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder={t("users.searchPlaceholder")}
+          onRefresh={() => fetchUsers()}
+          filters={[
+            {
+              key: "role",
+              label: t("users.roleFilter"),
+              value: roleFilter,
+              onChange: setRoleFilter,
+              options: [
+                { value: "student", label: t("users.roleStudent") },
+                { value: "supervisor", label: t("users.roleSupervisor") },
+              ],
+            },
+          ]}
+        />
       )}
 
       <Paper
@@ -762,12 +783,24 @@ export default function Users() {
               <Table>
                 <TableHead sx={{ bgcolor: "rgba(0,0,0,0.02)" }}>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 900 }}>{t("users.user")}</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>{t("users.email")}</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>{t("users.studentNumber")}</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>{t("users.accountStatus")}</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>{t("users.date")}</TableCell>
-                    <TableCell sx={{ fontWeight: 900 }}>{t("users.note")}</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>
+                      {t("users.user")}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>
+                      {t("users.email")}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>
+                      {t("users.studentNumber")}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>
+                      {t("users.accountStatus")}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>
+                      {t("users.date")}
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>
+                      {t("users.note")}
+                    </TableCell>
                     <TableCell sx={{ fontWeight: 900, textAlign: "center" }}>
                       {t("users.actions")}
                     </TableCell>
@@ -870,7 +903,9 @@ export default function Users() {
             <Table>
               <TableHead sx={{ bgcolor: "rgba(0,0,0,0.02)" }}>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 900, py: 2 }}>{t("users.name")}</TableCell>
+                  <TableCell sx={{ fontWeight: 900, py: 2 }}>
+                    {t("users.name")}
+                  </TableCell>
                   <TableCell sx={{ fontWeight: 900, py: 2 }}>
                     {t("users.studentNumber")}
                   </TableCell>
@@ -914,15 +949,17 @@ export default function Users() {
                     </TableCell>
                     <TableCell>{roleChip(u.role?.name || u.role)}</TableCell>
                     <TableCell sx={{ color: "text.secondary", maxWidth: 220 }}>
-                      {String(u.role?.name || u.role).toLowerCase() === "supervisor" ? (
-                        <Typography variant="body2" noWrap title={(u.supervisor_university_names || []).join(", ")}>
-                          {(u.supervisor_university_names || []).join("، ") || "—"}
-                        </Typography>
-                      ) : (
-                        "—"
-                      )}
+                      <Typography
+                        variant="body2"
+                        noWrap
+                        title={universityLabel(u)}
+                      >
+                        {universityLabel(u)}
+                      </Typography>
                     </TableCell>
-                    <TableCell>{statusChip(u.membership_status || u.status)}</TableCell>
+                    <TableCell>
+                      {statusChip(u.membership_status || u.status)}
+                    </TableCell>
                     <TableCell
                       sx={{ color: "text.secondary", fontSize: "0.9rem" }}
                     >
@@ -936,28 +973,29 @@ export default function Users() {
                         spacing={1}
                         justifyContent="center"
                       >
-                        {isAdmin && (u.membership_status || u.status) === "pending" && (
-                          <>
-                            <Tooltip title={t("users.approve")}>
-                              <IconButton
-                                color="success"
-                                size="small"
-                                onClick={() => handleApprove(u.id)}
-                              >
-                                <CheckCircleRoundedIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title={t("users.reject")}>
-                              <IconButton
-                                color="error"
-                                size="small"
-                                onClick={() => handleReject(u.id)}
-                              >
-                                <CancelRoundedIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </>
-                        )}
+                        {isAdmin &&
+                          (u.membership_status || u.status) === "pending" && (
+                            <>
+                              <Tooltip title={t("users.approve")}>
+                                <IconButton
+                                  color="success"
+                                  size="small"
+                                  onClick={() => handleApprove(u.id)}
+                                >
+                                  <CheckCircleRoundedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={t("users.reject")}>
+                                <IconButton
+                                  color="error"
+                                  size="small"
+                                  onClick={() => handleReject(u.id)}
+                                >
+                                  <CancelRoundedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          )}
                         <Tooltip title={t("users.edit")}>
                           <IconButton
                             color="primary"
@@ -1058,7 +1096,10 @@ export default function Users() {
             sx={{
               p: 2,
               borderRadius: 2,
-              bgcolor: (theme) => theme.palette.mode === "dark" ? "rgba(255,255,255,0.05)" : "#F9FAFB",
+              bgcolor: (theme) =>
+                theme.palette.mode === "dark"
+                  ? "rgba(255,255,255,0.05)"
+                  : "#F9FAFB",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -1111,7 +1152,9 @@ export default function Users() {
         fullWidth
         dir={dir}
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>{t("users.addTitle")}</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>
+          {t("users.addTitle")}
+        </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <TextField
