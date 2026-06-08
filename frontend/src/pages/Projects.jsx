@@ -100,6 +100,7 @@ export default function Projects() {
   const roleName = String(user?.role?.name || user?.role || "").toLowerCase();
   const currentUserId = Number(user?.user?.id || user?.id);
   const canCreateProject = roleName === "student" || roleName === "admin";
+  const isStudent = roleName === "student";
 
   /** Loads all projects visible to the current user. */
   const fetchProjects = async () => {
@@ -415,7 +416,21 @@ export default function Projects() {
             </Stack>
           </Stack>
 
-          <Grid container spacing={2.5}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs:
+                  isStudent && visibleProjects.length > 1
+                    ? "repeat(2, minmax(0, 1fr))"
+                    : "1fr",
+                sm: "repeat(2, minmax(0, 1fr))",
+                md: "repeat(3, minmax(0, 1fr))",
+              },
+              gap: 2.5,
+              alignItems: "stretch",
+            }}
+          >
             {visibleProjects.map((p) => {
               const status = derivedStatusFromProject(p);
               const pct = progressPercent(p);
@@ -430,18 +445,21 @@ export default function Projects() {
                     year: "numeric",
                   })
                 : null;
+              const compactCard = isStudent && visibleProjects.length > 1;
 
               return (
-                <Grid item xs={12} sm={6} lg={4} key={p.id}>
-                  <Card
-                    elevation={0}
-                    sx={{
-                      ...dashboardCardSx,
-                      ...accentTop(accent),
-                      minHeight: 320,
-                      position: "relative",
-                    }}
-                  >
+                <Card
+                  key={p.id}
+                  elevation={0}
+                  sx={{
+                    ...dashboardCardSx,
+                    ...accentTop(accent),
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    position: "relative",
+                  }}
+                >
                     <CardActionArea
                       component={Link}
                       to={`/dashboard/projects/${p.id}`}
@@ -459,8 +477,8 @@ export default function Projects() {
                           flex: 1,
                           display: "flex",
                           flexDirection: "column",
-                          p: 2.5,
-                          "&:last-child": { pb: 2.5 },
+                          p: compactCard ? { xs: 1.75, sm: 2.5 } : 2.5,
+                          "&:last-child": { pb: compactCard ? { xs: 1.75, sm: 2.5 } : 2.5 },
                         }}
                       >
                         <Stack direction="row" spacing={1.25} alignItems="flex-start" sx={{ mb: 1.5 }}>
@@ -521,7 +539,7 @@ export default function Projects() {
                             mb: 1.75,
                             flex: 1,
                             display: "-webkit-box",
-                            WebkitLineClamp: 3,
+                            WebkitLineClamp: compactCard ? 2 : 3,
                             WebkitBoxOrient: "vertical",
                             overflow: "hidden",
                             lineHeight: 1.65,
@@ -591,10 +609,9 @@ export default function Projects() {
                       </CardContent>
                     </CardActionArea>
                   </Card>
-                </Grid>
               );
             })}
-          </Grid>
+          </Box>
         </Paper>
       )}
 

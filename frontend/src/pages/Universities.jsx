@@ -53,9 +53,12 @@ export default function Universities() {
     try {
       setLoading(true);
       setError("");
-      const { res, data } = await apiFetch(`${API_BASE_URL}/admin/universities`, {
-        headers: authHeaders(),
-      });
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/admin/universities`,
+        {
+          headers: authHeaders(),
+        },
+      );
       if (res.ok && Array.isArray(data?.universities)) {
         setUniversities(data.universities);
       } else {
@@ -259,7 +262,9 @@ export default function Universities() {
                       </TableCell>
                       <TableCell sx={{ color: "text.secondary" }}>
                         {uni.created_at
-                          ? new Date(uni.created_at).toLocaleDateString(dateLocale)
+                          ? new Date(uni.created_at).toLocaleDateString(
+                              dateLocale,
+                            )
                           : "—"}
                       </TableCell>
                       <TableCell sx={{ textAlign: "left" }}>

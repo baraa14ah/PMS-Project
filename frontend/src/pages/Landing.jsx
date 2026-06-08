@@ -30,6 +30,7 @@ import LayersRoundedIcon from "@mui/icons-material/LayersRounded";
 import MailOutlineRoundedIcon from "@mui/icons-material/MailOutlineRounded";
 import ShieldRoundedIcon from "@mui/icons-material/ShieldRounded";
 import HubRoundedIcon from "@mui/icons-material/HubRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import NotificationsActiveRoundedIcon from "@mui/icons-material/NotificationsActiveRounded";
 import LockResetRoundedIcon from "@mui/icons-material/LockResetRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
@@ -334,6 +335,11 @@ export default function Landing() {
                           text={t("landing.trust3")}
                           isRtl={isRtl}
                         />
+                        <TrustPill
+                          icon={<AutoAwesomeRoundedIcon />}
+                          text={t("landing.trust4")}
+                          isRtl={isRtl}
+                        />
                       </Stack>
                     </Stack>
                   </Stack>
@@ -556,6 +562,12 @@ export default function Landing() {
                   title={t("landing.feat6Title")}
                   desc={t("landing.feat6Desc")}
                   color={AMBER}
+                />
+                <FeatureTile
+                  icon={<AutoAwesomeRoundedIcon />}
+                  title={t("landing.feat7Title")}
+                  desc={t("landing.feat7Desc")}
+                  color="#7C3AED"
                 />
               </Grid>
             </Container>

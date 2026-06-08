@@ -13,7 +13,9 @@ import {
   Chip,
   useTheme,
 } from "@mui/material";
+import LoadingButton from "@mui/lab/LoadingButton";
 import toast from "react-hot-toast";
+import Swal from "sweetalert2";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
 
@@ -22,11 +24,14 @@ import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import ProjectSectionShell from "../../components/ProjectSectionShell";
 
 /** Kanban-style project tasks tab with drag-and-drop status updates. */
 export default function TasksTab({
   projectId,
+  projectDescription,
+  showAiGenerate = false,
   tasks,
   setTasks,
   updateProgressLocally,
@@ -35,7 +40,7 @@ export default function TasksTab({
   closeDialog,
 }) {
   const { authHeaders, apiFetch, API_BASE_URL } = useAuth();
-  const { t, lang } = useLanguage();
+  const { t, lang, isRtl } = useLanguage();
   const dateLocale = lang === "ar" ? "ar-EG" : "en-US";
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -60,6 +65,8 @@ export default function TasksTab({
   });
   const [savingTask, setSavingTask] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isConfirmingRegenerate, setIsConfirmingRegenerate] = useState(false);
 
   const overdueCount = useMemo(
     () =>
@@ -84,6 +91,25 @@ export default function TasksTab({
     }
     return tasks.filter((task) => (task.status || "pending") === statusFilter);
   }, [tasks, statusFilter, today]);
+
+  const aiTasks = useMemo(
+    () => tasks.filter((task) => task.ai_generated === true),
+    [tasks],
+  );
+
+  const hasAiTasks = aiTasks.length > 0;
+
+  const canRegenerateAiTasks = useMemo(
+    () =>
+      hasAiTasks &&
+      aiTasks.every((task) => (task.status || "pending") === "pending"),
+    [aiTasks, hasAiTasks],
+  );
+
+  const showAiGenerateButton = !hasAiTasks || canRegenerateAiTasks;
+
+  const descriptionTooShort =
+    !projectDescription || projectDescription.length < 20;
 
   const filterChips = [
     { key: "all", label: t("projectDetails.taskFilterAll") },
@@ -184,6 +210,84 @@ export default function TasksTab({
       toast.error(t("common.serverError"));
     } finally {
       setSavingTask(false);
+    }
+  };
+
+  /** Generates AI tasks for the project, with optional regeneration. */
+  const handleGenerateAITasks = async (regenerate = false) => {
+    if (descriptionTooShort) {
+      toast.error(t("ideation.descriptionTooShort"));
+      return;
+    }
+
+    if (hasAiTasks && !canRegenerateAiTasks) {
+      return;
+    }
+
+    if (hasAiTasks && !regenerate) {
+      setIsConfirmingRegenerate(true);
+      try {
+        const result = await Swal.fire({
+          title: t("taskGeneration.confirmTitle"),
+          text: t("taskGeneration.confirmRegenerate"),
+          icon: "warning",
+          showCancelButton: true,
+          reverseButtons: isRtl,
+          confirmButtonColor: "#d33",
+          cancelButtonColor: "#3085d6",
+          confirmButtonText: t("common.confirm"),
+          cancelButtonText: t("common.cancel"),
+          didOpen: (popup) => {
+            if (isRtl) {
+              popup.setAttribute("dir", "rtl");
+              popup.style.textAlign = "right";
+            }
+          },
+        });
+
+        if (!result.isConfirmed) return;
+        return handleGenerateAITasks(true);
+      } finally {
+        setIsConfirmingRegenerate(false);
+      }
+    }
+
+    try {
+      setIsGeneratingAI(true);
+
+      const { res, data } = await apiFetch(
+        `${API_BASE_URL}/projects/${projectId}/generate-tasks`,
+        {
+          method: "POST",
+          headers: authHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ regenerate }),
+        },
+      );
+
+      if (!res.ok) {
+        toast.error(data?.message || t("taskGeneration.error"));
+        return;
+      }
+
+      const newAiTasks = data?.data?.tasks || [];
+
+      if (regenerate) {
+        const manualTasks = tasks.filter((task) => !task.ai_generated);
+        const updatedTasks = [...newAiTasks, ...manualTasks];
+        setTasks(updatedTasks);
+        updateProgressLocally(updatedTasks);
+      } else {
+        const updatedTasks = [...newAiTasks, ...tasks];
+        setTasks(updatedTasks);
+        updateProgressLocally(updatedTasks);
+      }
+
+      toast.success(data?.message || t("taskGeneration.success"));
+    } catch (err) {
+      console.error("AI task generation error:", err);
+      toast.error(t("taskGeneration.error"));
+    } finally {
+      setIsGeneratingAI(false);
     }
   };
 
@@ -423,6 +527,17 @@ export default function TasksTab({
                           >
                             {task.title}
                           </Typography>
+                          <Stack direction="row" spacing={1} sx={{ mt: 0.5, mb: 1 }}>
+                            {task.ai_generated && (
+                              <Chip
+                                label={t("taskGeneration.aiGenerated")}
+                                size="small"
+                                color="secondary"
+                                variant="outlined"
+                                sx={{ fontSize: "0.7rem", height: 20 }}
+                              />
+                            )}
+                          </Stack>
                           <Typography
                             variant="body2"
                             color="text.secondary"
@@ -544,6 +659,38 @@ export default function TasksTab({
           />
         ))}
       </Stack>
+
+      {showAiGenerate && showAiGenerateButton && (
+        <Box sx={{ mb: 3, display: "flex", justifyContent: "flex-end" }}>
+          <Tooltip
+            title={
+              descriptionTooShort ? t("ideation.descriptionTooShort") : ""
+            }
+            arrow
+          >
+            <span>
+              <LoadingButton
+                variant="contained"
+                color="secondary"
+                startIcon={<AutoAwesomeRoundedIcon />}
+                loading={isGeneratingAI}
+                loadingPosition="start"
+                disabled={
+                  descriptionTooShort || isGeneratingAI || isConfirmingRegenerate
+                }
+                onClick={() => handleGenerateAITasks(false)}
+                sx={{ fontWeight: 600 }}
+              >
+                {isGeneratingAI
+                  ? t("taskGeneration.generating")
+                  : hasAiTasks
+                    ? t("taskGeneration.regenerate")
+                    : t("taskGeneration.generate")}
+              </LoadingButton>
+            </span>
+          </Tooltip>
+        </Box>
+      )}
 
       <Box component="form" onSubmit={handleCreateTask} sx={{ mb: 4 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>

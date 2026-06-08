@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -29,8 +29,14 @@ import { AUTH_PRIMARY_BTN_CLASS } from "../utils/rtlSafeGradient";
 /** Login page with email/password authentication. */
 export default function Login() {
   const { t, isRtl } = useLanguage();
-  const { login } = useAuth();
+  const { login, isAuthenticated, status, loadingProfile } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated && status === "active" && !loadingProfile) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, status, loadingProfile, navigate]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);

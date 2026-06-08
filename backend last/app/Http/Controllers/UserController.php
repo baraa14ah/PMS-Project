@@ -23,7 +23,7 @@ class UserController extends Controller
         $adminUni = auth()->user()->university_id;
 
         $users = User::query()
-            ->with(['role', 'supervisorUniversities:id,name'])
+            ->with(['role', 'university:id,name', 'supervisorUniversities:id,name'])
             ->forTenantAdminListing()
             ->applyUserListFilters($request)
             ->orderBy('created_at', 'desc')
@@ -41,7 +41,7 @@ class UserController extends Controller
         $adminUni = auth()->user()->university_id;
 
         $users = User::query()
-            ->with(['role', 'supervisorUniversities:id,name'])
+            ->with(['role', 'university:id,name', 'supervisorUniversities:id,name'])
             ->forTenantAdminListing()
             ->applyUserListFilters($request->merge(['status' => 'pending']))
             ->orderBy('created_at', 'desc')
@@ -186,7 +186,7 @@ class UserController extends Controller
         $user = User::create([
             'name'           => $request->name,
             'email'          => $request->email,
-            'password'       => '12345678',
+            'password'       => 'bytehub',
             'role_id'        => $role->id,
             'university_id'  => auth()->user()->university_id,
             'student_number' => $request->role === 'student' ? $request->student_number : null,
@@ -208,7 +208,10 @@ class UserController extends Controller
 
         return response()->json([
             'message' => 'تم إضافة المستخدم بنجاح',
-            'user'    => $this->enrichUserForAdmin($user->load(['role', 'supervisorUniversities:id,name']), $adminUni),
+            'user'    => $this->enrichUserForAdmin(
+                $user->load(['role', 'university:id,name', 'supervisorUniversities:id,name']),
+                $adminUni,
+            ),
         ], 201);
     }
 
@@ -285,6 +288,8 @@ class UserController extends Controller
     private function enrichUserForAdmin(User $user, ?int $adminUni): User
     {
         $user->membership_status = $user->membershipStatusForUniversity($adminUni);
+        $user->university_name = $user->university?->name
+            ?? ($user->university_id ? University::whereKey($user->university_id)->value('name') : null);
 
         if ($user->isSupervisorRole()) {
             $user->supervisor_university_names = $user->supervisorUniversities

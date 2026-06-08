@@ -48,8 +48,13 @@ const hoverEffect = {
 /** Role-aware dashboard with stats, progress, and recent activity. */
 export default function Dashboard() {
   const { t } = useLanguage();
-  const { user, token: ctxToken, authHeaders, apiFetch, API_BASE_URL } =
-    useAuth();
+  const {
+    user,
+    token: ctxToken,
+    authHeaders,
+    apiFetch,
+    API_BASE_URL,
+  } = useAuth();
   const navigate = useNavigate();
 
   const token = ctxToken || localStorage.getItem("token");
@@ -119,11 +124,17 @@ export default function Dashboard() {
   const statusChip = (status) => {
     const s = (status || "pending").toLowerCase();
     if (s === "completed")
-      return <Chip size="small" color="success" label={t("dashboard.completed")} />;
+      return (
+        <Chip size="small" color="success" label={t("dashboard.completed")} />
+      );
     if (s === "in_progress")
-      return <Chip size="small" color="info" label={t("dashboard.inProgress")} />;
+      return (
+        <Chip size="small" color="info" label={t("dashboard.inProgress")} />
+      );
     if (s === "pending")
-      return <Chip size="small" color="warning" label={t("dashboard.pending")} />;
+      return (
+        <Chip size="small" color="warning" label={t("dashboard.pending")} />
+      );
     return <Chip size="small" variant="outlined" label={status || "—"} />;
   };
 
@@ -139,9 +150,12 @@ export default function Dashboard() {
         setLoading(true);
         setError("");
 
-        const { res, data } = await apiFetch(`${API_BASE_URL}/dashboard/summary`, {
-          headers: authHeaders(),
-        });
+        const { res, data } = await apiFetch(
+          `${API_BASE_URL}/dashboard/summary`,
+          {
+            headers: authHeaders(),
+          },
+        );
 
         if (!res.ok) {
           throw new Error(data?.message || t("dashboard.loadError"));
@@ -227,7 +241,8 @@ export default function Dashboard() {
   const roleTheme = getRoleTheme(role);
   const currentUserId = user?.user?.id || user?.id;
   const githubLinked = isGithubLinked(user);
-  const showGithubSetup = (role === "student" || role === "supervisor") && !githubLinked;
+  const showGithubSetup =
+    (role === "student" || role === "supervisor") && !githubLinked;
 
   return (
     <Box sx={{ maxWidth: 1400, mx: "auto" }}>

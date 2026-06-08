@@ -6,6 +6,7 @@ import PersonAddAltRoundedIcon from "@mui/icons-material/PersonAddAltRounded";
 import GroupRoundedIcon from "@mui/icons-material/GroupRounded";
 import SchoolRoundedIcon from "@mui/icons-material/SchoolRounded";
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 
 /** Sidebar items visible per role (student, supervisor, admin, super_admin). */
 export const NAV_ITEMS = [
@@ -50,6 +51,13 @@ export const NAV_ITEMS = [
     badgeKey: "studentInv",
   },
   {
+    id: "ideation",
+    labelKey: "nav.ideation",
+    to: "/dashboard/ideation",
+    icon: AutoAwesomeRoundedIcon,
+    roles: ["student"],
+  },
+  {
     id: "users",
     labelKey: "nav.usersManagement",
     labelKeySuper: "nav.users",
@@ -81,6 +89,7 @@ const DEFAULT_ORDER = {
   notifications: 2,
   supervisor_invitations: 3,
   student_invitations: 3,
+  ideation: 3,
   users: 4,
   universities: 5,
   profile: 99,

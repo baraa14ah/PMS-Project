@@ -36,4 +36,15 @@ return [
         'redirect' => env('GITHUB_REDIRECT_URI'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        'endpoint' => sprintf(
+            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent',
+            env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        ),
+        'timeout' => 60,
+        'retry_attempts' => 3,
+    ],
+
 ];
