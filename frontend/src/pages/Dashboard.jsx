@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import PageHeader from "../components/PageHeader";
 import { headerActionBtnSx } from "../styles/dashboardUi";
+import { textEllipsisSx } from "../styles/textEllipsis";
 import { getRoleTheme } from "../config/roleTheme";
 import Swal from "sweetalert2";
 import {
@@ -92,6 +93,7 @@ export default function Dashboard() {
     tasksCompleted: 0,
     progress: 0,
     pendingInvites: 0,
+    pendingUsers: 0,
   });
 
   const [recentProjects, setRecentProjects] = useState([]);
@@ -168,6 +170,7 @@ export default function Dashboard() {
           tasksCompleted: s.tasks_completed ?? 0,
           progress: s.progress ?? 0,
           pendingInvites: s.pending_invites ?? 0,
+          pendingUsers: s.pending_users ?? 0,
         });
 
         setRecentProjects(data?.recent_projects || []);
@@ -189,7 +192,7 @@ export default function Dashboard() {
         greeting: t("dashboard.adminGreeting"),
         projectsTitle: t("dashboard.adminProjects"),
         tasksTitle: t("dashboard.adminTasks"),
-        invitesTitle: t("dashboard.adminInvites"),
+        invitesTitle: t("users.tabPending"),
         action1: {
           label: t("dashboard.adminManageProjects"),
           icon: <FolderOpenRoundedIcon />,
@@ -243,6 +246,50 @@ export default function Dashboard() {
   const githubLinked = isGithubLinked(user);
   const showGithubSetup =
     (role === "student" || role === "supervisor") && !githubLinked;
+
+  const statCards = useMemo(() => {
+    const fourthCard =
+      role === "admin"
+        ? {
+            title: t("users.tabPending"),
+            value: stats.pendingUsers,
+            icon: <HourglassBottomRoundedIcon fontSize="large" />,
+            desc: t("users.pendingAlertTitle"),
+            color: roleTheme.accent,
+          }
+        : {
+            title: t("dashboard.invites"),
+            value: stats.pendingInvites,
+            icon: <HourglassBottomRoundedIcon fontSize="large" />,
+            desc: currentConfig.invitesTitle,
+            color: "#F59E0B",
+          };
+
+    return [
+      {
+        title: t("dashboard.projects"),
+        value: stats.projectsTotal,
+        icon: <FolderOpenRoundedIcon fontSize="large" />,
+        desc: currentConfig.projectsTitle,
+        color: role === "student" ? roleTheme.accent : "#3B82F6",
+      },
+      {
+        title: t("dashboard.tasks"),
+        value: stats.tasksTotal,
+        icon: <ListAltRoundedIcon fontSize="large" />,
+        desc: currentConfig.tasksTitle,
+        color: "#8B5CF6",
+      },
+      {
+        title: t("dashboard.completed"),
+        value: stats.tasksCompleted,
+        icon: <CheckCircleRoundedIcon fontSize="large" />,
+        desc: t("dashboard.completed"),
+        color: "#10B981",
+      },
+      fourthCard,
+    ];
+  }, [role, stats, currentConfig, roleTheme, t]);
 
   return (
     <Box sx={{ maxWidth: 1400, mx: "auto" }}>
@@ -366,36 +413,7 @@ export default function Dashboard() {
           spacing={2}
           sx={{ mt: 3 }}
         >
-          {[
-            {
-              title: t("dashboard.projects"),
-              value: stats.projectsTotal,
-              icon: <FolderOpenRoundedIcon fontSize="large" />,
-              desc: currentConfig.projectsTitle,
-              color: role === "student" ? roleTheme.accent : "#3B82F6",
-            },
-            {
-              title: t("dashboard.tasks"),
-              value: stats.tasksTotal,
-              icon: <ListAltRoundedIcon fontSize="large" />,
-              desc: currentConfig.tasksTitle,
-              color: "#8B5CF6",
-            },
-            {
-              title: t("dashboard.completed"),
-              value: stats.tasksCompleted,
-              icon: <CheckCircleRoundedIcon fontSize="large" />,
-              desc: t("dashboard.completed"),
-              color: "#10B981",
-            },
-            {
-              title: t("dashboard.invites"),
-              value: stats.pendingInvites,
-              icon: <HourglassBottomRoundedIcon fontSize="large" />,
-              desc: currentConfig.invitesTitle,
-              color: role === "admin" ? roleTheme.accent : "#F59E0B",
-            },
-          ].map((stat, idx) => (
+          {statCards.map((stat, idx) => (
             <Paper
               key={idx}
               elevation={0}
@@ -546,8 +564,8 @@ export default function Dashboard() {
                                 display: "block",
                                 color: "text.secondary",
                                 fontWeight: 400,
+                                ...textEllipsisSx,
                               }}
-                              noWrap
                             >
                               {p.description
                                 ? p.description.length > 40
@@ -664,8 +682,8 @@ export default function Dashboard() {
                               color: "text.secondary",
                               fontSize: "0.85rem",
                               maxWidth: 120,
+                              ...textEllipsisSx,
                             }}
-                            noWrap
                           >
                             {task.project_title ||
                               (task.project_id

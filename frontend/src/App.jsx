@@ -117,6 +117,15 @@ function DashboardIndex() {
   return <Dashboard />;
 }
 
+/** Blocks university admins from student/supervisor-only invitation screens. */
+function InvitationRoute({ children, allowedRole }) {
+  const { role } = useAuth();
+  const roleName = String(role || "").toLowerCase();
+  if (roleName === "admin") return <Navigate to="/dashboard" replace />;
+  if (roleName !== allowedRole) return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 /** Root router: public auth pages and protected dashboard routes. */
 export default function App() {
   return (
@@ -163,7 +172,9 @@ export default function App() {
             path="supervisor/invitations"
             element={
               <TenantRoute>
-                <SupervisorInvitations />
+                <InvitationRoute allowedRole="supervisor">
+                  <SupervisorInvitations />
+                </InvitationRoute>
               </TenantRoute>
             }
           />
@@ -171,7 +182,9 @@ export default function App() {
             path="student/invitations"
             element={
               <TenantRoute>
-                <StudentInvitations />
+                <InvitationRoute allowedRole="student">
+                  <StudentInvitations />
+                </InvitationRoute>
               </TenantRoute>
             }
           />

@@ -2,10 +2,24 @@
 
 namespace App\Models\Concerns;
 
+use App\Models\Role;
 use App\Models\University;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * User visibility helpers for multi-university supervisor membership.
+ *
+ * @mixin Model
+ * @property-read Role|null $role
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, University> $supervisorUniversities
+ * @property int|null $university_id
+ * @property int $id
+ * @property string|null $status
+ * @method static Builder query()
+ */
 trait HasUniversityVisibility
 {
     /** Returns universities linked to this supervisor via pivot. */
@@ -22,7 +36,7 @@ trait HasUniversityVisibility
     /** Returns whether the user has the supervisor role. */
     public function isSupervisorRole(): bool
     {
-        return $this->role && $this->role->name === 'supervisor';
+        return $this->role?->name === 'supervisor';
     }
 
     /** Syncs supervisor-university memberships with status and approval metadata. */
@@ -202,7 +216,7 @@ trait HasUniversityVisibility
     }
 
     /** Applies search, role, and status filters from a request. */
-    public function scopeApplyUserListFilters(Builder $query, $request): Builder
+    public function scopeApplyUserListFilters(Builder $query, Request $request): Builder
     {
         if ($request->filled('search')) {
             $term = '%' . trim($request->search) . '%';

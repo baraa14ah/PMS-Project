@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useThemeMode } from "../context/ThemeContext";
 import { useLanguage } from "../context/LanguageContext";
+import { textEllipsisSx } from "../styles/textEllipsis";
 import SystemBreadcrumbs from "../components/SystemBreadcrumbs";
 import NotificationBellMenu from "../components/NotificationBellMenu";
 import BrandLogo from "../components/BrandLogo";
@@ -214,7 +215,7 @@ export default function DashboardLayout() {
               <Typography sx={{ fontWeight: 950, lineHeight: 1.1 }}>
                 {t("common.appName")}
               </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.8 }} noWrap>
+              <Typography variant="caption" sx={{ opacity: 0.8, ...textEllipsisSx }}>
                 {t("common.appTagline")}
               </Typography>
             </Box>
@@ -235,7 +236,7 @@ export default function DashboardLayout() {
               {(displayName?.[0] || "U").toUpperCase()}
             </Avatar>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography sx={{ fontWeight: 800, fontSize: 14 }} noWrap>
+              <Typography sx={{ fontWeight: 800, fontSize: 14, ...textEllipsisSx }}>
                 {displayName}
               </Typography>
               <Chip
@@ -251,7 +252,7 @@ export default function DashboardLayout() {
                 }}
               />
               {workspaceLabel && (
-                <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                <Typography variant="caption" color="text.secondary" display="block" sx={textEllipsisSx}>
                   {workspaceLabel}
                 </Typography>
               )}

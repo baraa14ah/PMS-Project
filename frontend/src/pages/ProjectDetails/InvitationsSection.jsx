@@ -22,6 +22,7 @@ import EmailRoundedIcon from "@mui/icons-material/EmailRounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { textEllipsisSx } from "../../styles/textEllipsis";
 import { btnPrimarySx } from "../../styles/dashboardUi";
 import ProjectSectionShell from "../../components/ProjectSectionShell";
 
@@ -176,7 +177,7 @@ export default function InvitationsSection({
         {option.name?.charAt(0)?.toUpperCase() || "?"}
       </Avatar>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: 14, color: "text.primary" }} noWrap>
+        <Typography sx={{ fontWeight: 800, fontSize: 14, color: "text.primary", ...textEllipsisSx }}>
           {option.name || t("common.unknown")}
         </Typography>
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 0.5 }}>
@@ -191,7 +192,7 @@ export default function InvitationsSection({
           {option.email && (
             <Stack direction="row" spacing={0.5} alignItems="center">
               <EmailRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-              <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }} noWrap>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", ...textEllipsisSx }}>
                 {option.email}
               </Typography>
             </Stack>
@@ -230,13 +231,13 @@ export default function InvitationsSection({
         {option.name?.charAt(0)?.toUpperCase() || "?"}
       </Avatar>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ fontWeight: 800, fontSize: 14, color: "text.primary" }} noWrap>
+        <Typography sx={{ fontWeight: 800, fontSize: 14, color: "text.primary", ...textEllipsisSx }}>
           {option.name || t("common.unknown")}
         </Typography>
         {option.email && (
           <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
             <EmailRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }} noWrap>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", ...textEllipsisSx }}>
               {option.email}
             </Typography>
           </Stack>

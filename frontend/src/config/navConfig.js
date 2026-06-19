@@ -39,7 +39,7 @@ export const NAV_ITEMS = [
     labelKey: "nav.supervisorInvitations",
     to: "/dashboard/supervisor/invitations",
     icon: SupervisorAccountRoundedIcon,
-    roles: ["supervisor", "admin"],
+    roles: ["supervisor"],
     badgeKey: "supervisorInv",
   },
   {
@@ -47,7 +47,7 @@ export const NAV_ITEMS = [
     labelKey: "nav.studentInvitations",
     to: "/dashboard/student/invitations",
     icon: PersonAddAltRoundedIcon,
-    roles: ["student", "admin"],
+    roles: ["student"],
     badgeKey: "studentInv",
   },
   {

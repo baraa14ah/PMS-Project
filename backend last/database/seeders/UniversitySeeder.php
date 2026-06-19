@@ -23,7 +23,7 @@ class UniversitySeeder extends Seeder
             ['slug' => 'test-b']
         );
 
-        $superAdminRole = Role::firstOrCreate(['name' => 'super_admin']);
+        $superAdminRole = Role::where('name', 'super_admin')->firstOrFail();
 
         User::firstOrCreate(
             ['email' => 'superadmin@pms.local'],

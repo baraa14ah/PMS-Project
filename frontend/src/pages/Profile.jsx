@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
+import { textEllipsisSx } from "../styles/textEllipsis";
 import { rtlSafeGradientStyle } from "../utils/rtlSafeGradient";
 import toast from "react-hot-toast";
 import {
@@ -530,7 +531,7 @@ export default function Profile() {
                       >
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
                           <SchoolRoundedIcon fontSize="small" color="action" />
-                          <Typography sx={{ fontWeight: 800 }} noWrap>
+                          <Typography sx={{ fontWeight: 800, ...textEllipsisSx }}>
                             {uni.name}
                           </Typography>
                         </Stack>

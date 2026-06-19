@@ -20,6 +20,7 @@ import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { textEllipsisSx } from "../../styles/textEllipsis";
 import ProjectSectionShell from "../../components/ProjectSectionShell";
 import { dashboardCardSx } from "../../styles/dashboardUi";
 
@@ -251,12 +252,12 @@ export default function ProjectInfoCard({
                         {m.name?.charAt(0)?.toUpperCase() || "?"}
                       </Avatar>
                       <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 800 }} noWrap>
+                        <Typography sx={{ fontWeight: 800, ...textEllipsisSx }}>
                           {m.name}
                           {isOwner ? t("projectDetails.ownerBadge") : ""}
                         </Typography>
                         {m.email && (
-                          <Typography variant="caption" color="text.secondary" noWrap>
+                          <Typography variant="caption" color="text.secondary" sx={textEllipsisSx}>
                             {m.email}
                           </Typography>
                         )}

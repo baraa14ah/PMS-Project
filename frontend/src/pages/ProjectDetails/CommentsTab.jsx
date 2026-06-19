@@ -14,6 +14,7 @@ import {
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { textEllipsisSx } from "../../styles/textEllipsis";
 
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -288,8 +289,7 @@ export default function CommentsTab({
                       <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
                         <Typography
                           variant="subtitle2"
-                          sx={{ fontWeight: 900, lineHeight: 1.2 }}
-                          noWrap
+                          sx={{ fontWeight: 900, lineHeight: 1.2, ...textEllipsisSx }}
                         >
                           {authorName}
                         </Typography>

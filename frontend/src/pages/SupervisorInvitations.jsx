@@ -113,7 +113,7 @@ export default function SupervisorInvitations() {
     }
   };
 
-  if (roleName !== "supervisor" && roleName !== "admin") {
+  if (roleName !== "supervisor") {
     return (
       <Box sx={{ maxWidth: 1200, mx: "auto", mt: 4 }}>
         <Alert severity="warning" sx={{ borderRadius: 2, fontWeight: "bold" }}>

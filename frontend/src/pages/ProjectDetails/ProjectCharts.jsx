@@ -106,7 +106,7 @@ export default function ProjectCharts({ tasks }) {
           ))}
         </Stack>
 
-        <Box sx={{ flex: 1, minHeight: 240 }}>
+        <Box sx={{ flex: 1, minWidth: 0, height: 240 }}>
           {tasks.length === 0 ? (
             <Box
               sx={{
@@ -124,7 +124,7 @@ export default function ProjectCharts({ tasks }) {
               </Typography>
             </Box>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={240} minWidth={0}>
               <PieChart>
                 <Pie
                   data={stats}

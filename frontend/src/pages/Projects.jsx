@@ -43,6 +43,7 @@ import {
   BLUE,
   NAVY,
 } from "../styles/dashboardUi";
+import { textEllipsisSx } from "../styles/textEllipsis";
 
 const STATUS_COLORS = {
   completed: "#10B981",
@@ -280,7 +281,7 @@ export default function Projects() {
         {statCards.map((item) => {
           const Icon = item.icon;
           return (
-            <Grid item xs={6} md={3} key={item.key}>
+            <Grid size={{ xs: 6, md: 3 }} key={item.key}>
               <Paper
                 elevation={0}
                 sx={{
@@ -552,7 +553,7 @@ export default function Projects() {
                         <Stack spacing={0.85} sx={{ mb: 2 }}>
                           <Stack direction="row" spacing={1} alignItems="center">
                             <PersonRoundedIcon sx={{ fontSize: 17, color: "text.secondary" }} />
-                            <Typography variant="body2" color="text.secondary" noWrap>
+                            <Typography variant="body2" color="text.secondary" sx={textEllipsisSx}>
                               {t("projects.ownerLabel")}:{" "}
                               <Typography component="span" fontWeight={800} color="text.primary">
                                 {p.user?.name || "—"}
@@ -561,7 +562,7 @@ export default function Projects() {
                           </Stack>
                           <Stack direction="row" spacing={1} alignItems="center">
                             <SupervisorAccountRoundedIcon sx={{ fontSize: 17, color: "text.secondary" }} />
-                            <Typography variant="body2" color="text.secondary" noWrap>
+                            <Typography variant="body2" color="text.secondary" sx={textEllipsisSx}>
                               {t("projects.supervisorLabel")}:{" "}
                               <Typography component="span" fontWeight={800} color="text.primary">
                                 {p.supervisor?.name || t("projects.noSupervisor")}

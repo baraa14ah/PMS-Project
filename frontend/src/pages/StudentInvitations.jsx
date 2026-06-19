@@ -113,7 +113,7 @@ export default function StudentInvitations() {
     }
   };
 
-  if (roleName !== "student" && roleName !== "admin") {
+  if (roleName !== "student") {
     return (
       <Alert severity="warning" sx={{ borderRadius: 2 }}>
         {t("studentInvitations.studentsOnly")}
