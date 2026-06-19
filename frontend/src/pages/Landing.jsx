@@ -585,9 +585,7 @@ export default function Landing() {
             <Container maxWidth="lg">
               <Grid container spacing={4} alignItems="center">
                 <Grid
-                  item
-                  xs={12}
-                  md={5}
+                  size={{ xs: 12, md: 5 }}
                   dir={flow.dir}
                   sx={{
                     textAlign: flow.textAlign,
@@ -649,7 +647,7 @@ export default function Landing() {
                     {t("landing.previewCta")}
                   </Button>
                 </Grid>
-                <Grid item xs={12} md={7} sx={{ order: columns.visual }}>
+                <Grid size={{ xs: 12, md: 7 }} sx={{ order: columns.visual }}>
                   <DashboardMockup />
                 </Grid>
               </Grid>
@@ -1161,7 +1159,7 @@ function DashboardMockup() {
             { label: t("dashboard.tasks"), val: "48", c: TEAL },
             { label: t("dashboard.progress"), val: "67%", c: AMBER },
           ].map((s) => (
-            <Grid item xs={4} key={s.label}>
+            <Grid size={4} key={s.label}>
               <Box
                 sx={{
                   p: 1.5,
@@ -1273,7 +1271,7 @@ function RoleCard({ icon, color, role, points }) {
   const { isRtl } = useLanguage();
   const flow = textFlow(isRtl);
   return (
-    <Grid item xs={12} sm={6} lg={3}>
+    <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
       <Paper
         elevation={0}
         dir={flow.dir}
@@ -1344,7 +1342,7 @@ function FeatureTile({ icon, title, desc, color }) {
   const { isRtl } = useLanguage();
   const flow = textFlow(isRtl);
   return (
-    <Grid item xs={12} sm={6} md={4}>
+    <Grid size={{ xs: 12, sm: 6, md: 4 }}>
       <Paper
         elevation={0}
         dir={flow.dir}

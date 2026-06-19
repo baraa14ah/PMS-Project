@@ -22,6 +22,7 @@ import {
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
+import { textEllipsisSx } from "../styles/textEllipsis";
 
 /** Expandable AI suggestion card with bookmark action. */
 export default function IdeaSuggestionCard({
@@ -92,7 +93,7 @@ export default function IdeaSuggestionCard({
         </Collapse>
 
         {!expanded && (
-          <Typography variant="body2" color="text.secondary" noWrap sx={{ mb: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1, ...textEllipsisSx }}>
             {suggestion.goal}
           </Typography>
         )}

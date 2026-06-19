@@ -2,40 +2,53 @@
 
 namespace App\Services;
 
-use Carbon\Carbon;
 use App\Models\Project;
-use App\Models\ProjectVersion;
 use App\Models\ProjectActivity;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use App\Services\NotificationService;
-use App\Services\GithubService;
+use App\Models\ProjectVersion;
+use App\Models\User;
 use App\Support\ProjectAccess;
+use Carbon\Carbon;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class ProjectVersionService
 {
-    protected NotificationService $notifications;
-    protected GithubService $githubService;
-
     /** Injects notification and GitHub service dependencies. */
-    public function __construct(NotificationService $notifications, GithubService $githubService)
-    {
-        $this->notifications = $notifications;
-        $this->githubService = $githubService;
-    }
+    public function __construct(
+        protected NotificationService $notifications,
+        protected GithubService $githubService,
+    ) {}
 
     /** Checks whether the user can access the project. */
-    private function canAccessProject($user, Project $project): bool
+    private function canAccessProject(User $user, Project $project): bool
     {
         return ProjectAccess::canAccess($user, $project);
     }
 
+    /** Maps a version model to an API payload. */
+    private function formatVersion(ProjectVersion $version): array
+    {
+        return [
+            'id'                  => $version->id,
+            'user_id'             => $version->user_id,
+            'version_title'       => $version->version_title,
+            'version_description' => $version->version_description,
+            'file_url'            => $version->file_path ? asset('storage/' . $version->file_path) : null,
+            'uploaded_by'         => $version->user?->name,
+            'created_at'          => $version->created_at,
+        ];
+    }
+
     /** Uploads a new project version file and logs the activity. */
-    public function uploadVersion($data, $file, $user)
+    public function uploadVersion(array $data, UploadedFile $file, User $user): array
     {
         $project = Project::query()->whereKey($data['project_id'])->first();
-        if (!$project) return ['status' => 404, 'message' => 'Resource not found.'];
-        if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
+        if (!$project) {
+            return ['status' => 404, 'message' => 'Resource not found.'];
+        }
+        if (!$this->canAccessProject($user, $project)) {
+            return ['status' => 403, 'message' => 'Unauthorized'];
+        }
 
         $path = $file->store('versions', 'public');
 
@@ -49,11 +62,11 @@ class ProjectVersionService
 
         ProjectActivity::create([
             'project_id' => $project->id,
-            'user_id' => $user->id,
-            'action' => 'رفع إصداراً جديداً: ' . $version->version_title,
+            'user_id'    => $user->id,
+            'action'     => 'رفع إصداراً جديداً: ' . $version->version_title,
             'action_key' => 'versionUploaded',
-            'meta' => ['title' => $version->version_title],
-            'type' => 'create',
+            'meta'       => ['title' => $version->version_title],
+            'type'       => 'create',
         ]);
 
         try {
@@ -63,67 +76,75 @@ class ProjectVersionService
                 title: 'تم رفع إصدار جديد',
                 body: "قام {$user->name} برفع إصدار {$version->version_title} داخل مشروع {$project->title}",
                 data: [
-                    'project_id' => $project->id,
-                    'version_id' => $version->id,
-                    'url' => "/dashboard/projects/{$project->id}",
-                    'actor_name' => $user->name,
+                    'project_id'    => $project->id,
+                    'version_id'    => $version->id,
+                    'url'           => "/dashboard/projects/{$project->id}",
+                    'actor_name'    => $user->name,
                     'version_title' => $version->version_title,
                     'project_title' => $project->title,
                 ],
-                ignoreUserId: $user->id
+                ignoreUserId: $user->id,
             );
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
-        return ['status' => 201, 'message' => 'Version uploaded successfully', 'version' => $version->load('user:id,name')];
+        return [
+            'status'  => 201,
+            'message' => 'Version uploaded successfully',
+            'version' => $version->load('user:id,name'),
+        ];
     }
 
     /** Returns all versions for a project if the user has access. */
-    public function getVersions($projectId, $user)
+    public function getVersions(int|string $projectId, User $user): array
     {
         $project = Project::query()->whereKey($projectId)->first();
-        if (!$project) return ['status' => 404, 'message' => 'Resource not found.'];
-        if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
+        if (!$project) {
+            return ['status' => 404, 'message' => 'Resource not found.'];
+        }
+        if (!$this->canAccessProject($user, $project)) {
+            return ['status' => 403, 'message' => 'Unauthorized'];
+        }
 
-        $versions = ProjectVersion::query()->forCurrentUniversity()
+        $versions = ProjectVersion::query()
+            ->forCurrentUniversity()
             ->where('project_id', $projectId)
             ->with('user:id,name')
-            ->orderBy('created_at', 'desc')
+            ->orderByDesc('created_at')
             ->get()
-            ->map(fn($v) => [
-                'id'                  => $v->id,
-                'user_id'             => $v->user_id,
-                'version_title'       => $v->version_title,
-                'version_description' => $v->version_description,
-                'file_url'            => $v->file_path ? asset('storage/' . $v->file_path) : null,
-                'uploaded_by'         => $v->user?->name,
-                'created_at'          => $v->created_at,
-            ]);
+            ->map(fn (ProjectVersion $version) => $this->formatVersion($version));
 
         return ['status' => 200, 'versions' => $versions];
     }
 
     /** Deletes a version if the user is the project or version owner. */
-    public function deleteVersion($versionId, $user)
+    public function deleteVersion(int|string $versionId, User $user): array
     {
         $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
-        if (!$version) return ['status' => 404, 'message' => 'Resource not found.'];
+        if (!$version) {
+            return ['status' => 404, 'message' => 'Resource not found.'];
+        }
 
         $project = Project::query()->whereKey($version->project_id)->first();
-        
-        $isOwnerProject = $project->user_id === $user->id;
-        $isOwnerVersion = $version->user_id === $user->id;
+        if (!$project) {
+            return ['status' => 404, 'message' => 'Resource not found.'];
+        }
 
-        if (!($isOwnerProject || $isOwnerVersion)) {
+        $isOwnerProject = (int) $project->user_id === (int) $user->id;
+        $isOwnerVersion = (int) $version->user_id === (int) $user->id;
+
+        if (!$isOwnerProject && !$isOwnerVersion) {
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
 
         ProjectActivity::create([
             'project_id' => $project->id,
-            'user_id' => $user->id,
-            'action' => 'حذف الإصدار: ' . $version->version_title,
+            'user_id'    => $user->id,
+            'action'     => 'حذف الإصدار: ' . $version->version_title,
             'action_key' => 'versionDeleted',
-            'meta' => ['title' => $version->version_title],
-            'type' => 'update',
+            'meta'       => ['title' => $version->version_title],
+            'type'       => 'update',
         ]);
 
         if ($version->file_path && Storage::disk('public')->exists($version->file_path)) {
@@ -131,94 +152,70 @@ class ProjectVersionService
         }
 
         $version->delete();
+
         return ['status' => 200, 'message' => 'Version deleted successfully'];
     }
 
     /** Returns versions grouped by month for timeline display. */
-    public function getTimeline($projectId, $user)
+    public function getTimeline(int|string $projectId, User $user): array
     {
         $project = Project::query()->whereKey($projectId)->first();
-        if (!$project) return ['status' => 404, 'message' => 'Resource not found.'];
-        if (!$this->canAccessProject($user, $project)) return ['status' => 403, 'message' => 'Unauthorized'];
+        if (!$project) {
+            return ['status' => 404, 'message' => 'Resource not found.'];
+        }
+        if (!$this->canAccessProject($user, $project)) {
+            return ['status' => 403, 'message' => 'Unauthorized'];
+        }
 
-        $versions = ProjectVersion::query()->forCurrentUniversity()
-            ->where('project_id', $projectId)->with('user:id,name')->orderBy('created_at', 'desc')->get();
+        $versions = ProjectVersion::query()
+            ->forCurrentUniversity()
+            ->where('project_id', $projectId)
+            ->with('user:id,name')
+            ->orderByDesc('created_at')
+            ->get();
 
-        $timeline = $versions->groupBy(fn ($v) => Carbon::parse($v->created_at)->format('F Y'))->map(function ($items, $month) {
-            return [
-                'month' => $month,
-                'versions' => $items->map(fn ($v) => [
-                    'id' => $v->id,
-                    'version_title' => $v->version_title,
-                    'created_at' => Carbon::parse($v->created_at)->format('Y-m-d H:i'),
-                ])->values()
-            ];
-        })->values();
+        $timeline = $versions
+            ->groupBy(fn (ProjectVersion $version) => Carbon::parse($version->created_at)->format('F Y'))
+            ->map(fn ($items, string $month) => [
+                'month'    => $month,
+                'versions' => $items->map(fn (ProjectVersion $version) => [
+                    'id'            => $version->id,
+                    'version_title' => $version->version_title,
+                    'created_at'    => Carbon::parse($version->created_at)->format('Y-m-d H:i'),
+                ])->values(),
+            ])
+            ->values();
 
         return ['status' => 200, 'timeline' => $timeline];
     }
 
     /** Pushes a version file to GitHub on behalf of the project owner. */
-    public function pushToGithub($versionId, $user)
+    public function pushToGithub(int|string $versionId, User $user): array
     {
         $version = ProjectVersion::query()->forCurrentUniversity()->whereKey($versionId)->first();
-        if (!$version) return ['status' => 404, 'message' => 'Resource not found.'];
+        if (!$version) {
+            return ['status' => 404, 'message' => 'Resource not found.'];
+        }
 
         $project = Project::query()->whereKey($version->project_id)->first();
+        if (!$project) {
+            return ['status' => 404, 'message' => 'Resource not found.'];
+        }
         if (!$this->canAccessProject($user, $project)) {
             return ['status' => 403, 'message' => 'Unauthorized'];
         }
-
         if ((int) $project->user_id !== (int) $user->id) {
             return ['status' => 403, 'message' => 'Only the project owner can push to GitHub.'];
         }
-
         if (!$user->github_token) {
             return ['status' => 403, 'message' => 'Please link your GitHub account first.'];
         }
 
         return $this->githubService->pushVersionToGithub(
-            $project, 
-            $version->version_title, 
+            $project,
+            $version->version_title,
             $version->version_description,
-            $version->file_path
+            $version->file_path,
         );
-    }
-
-    /** Creates in-app notifications for all project participants. */
-    public function notifyProject(\App\Models\Project $project, string $type, string $title, string $body, array $data = [], int $ignoreUserId = null)
-    {
-        $userIds = [];
-
-        if ($project->user_id) {
-            $userIds[] = $project->user_id;
-        }
-
-        if ($project->supervisor_id) {
-            $userIds[] = $project->supervisor_id;
-        }
-
-        $members = \Illuminate\Support\Facades\DB::table('project_members')
-            ->where('project_id', $project->id)
-            ->where('project_members.status', 'accepted')
-            ->pluck('student_id')
-            ->toArray();
-        
-        $userIds = array_merge($userIds, $members);
-        $userIds = array_unique($userIds);
-
-        if ($ignoreUserId) {
-            $userIds = array_diff($userIds, [$ignoreUserId]);
-        }
-
-        foreach ($userIds as $userId) {
-            \App\Models\Notification::create([
-                'user_id' => $userId,
-                'type'    => $type,
-                'title'   => $title,
-                'body'    => $body,
-                'data'    => $data,
-            ]);
-        }
     }
 }

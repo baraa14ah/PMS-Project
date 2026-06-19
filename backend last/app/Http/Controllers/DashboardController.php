@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\StudentInvitation;
-use App\Models\SupervisorInvitation;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\InvitationService;
@@ -52,7 +50,7 @@ class DashboardController extends Controller
         }
 
         return response()->json([
-            'stats' => [
+            'stats' => array_merge([
                 'projects_total'   => $projects->count(),
                 'tasks_total'      => $tasksTotal,
                 'tasks_completed'  => $tasksCompleted,
@@ -60,7 +58,9 @@ class DashboardController extends Controller
                     ? round(($tasksCompleted / $tasksTotal) * 100, 1)
                     : 0,
                 'pending_invites'  => $this->pendingInvitesCount($user, $roleName),
-            ],
+            ], $roleName === 'admin' && $user->university_id ? [
+                'pending_users' => User::pendingApprovalCountForUniversity((int) $user->university_id),
+            ] : []),
             'recent_projects' => $projects->take(6)->values(),
             'recent_tasks'    => $recentTasks->take(6)->values(),
         ]);
@@ -100,34 +100,20 @@ class DashboardController extends Controller
     /** Count pending student invitations for the current role. */
     private function studentInvitesCount($user, string $roleName): int
     {
-        if (!in_array($roleName, ['student', 'admin'], true)) {
+        if ($roleName !== 'student') {
             return 0;
         }
 
-        if ($roleName === 'student') {
-            return $this->invitationService->getStudentInvitations($user->id)->count();
-        }
-
-        return StudentInvitation::query()
-            ->forCurrentUniversity()
-            ->where('status', 'pending')
-            ->count();
+        return $this->invitationService->getStudentInvitations($user->id)->count();
     }
 
     /** Count pending supervisor invitations for the current role. */
     private function supervisorInvitesCount($user, string $roleName): int
     {
-        if (!in_array($roleName, ['supervisor', 'admin'], true)) {
+        if ($roleName !== 'supervisor') {
             return 0;
         }
 
-        if ($roleName === 'supervisor') {
-            return $this->invitationService->getSupervisorInvitations($user->id)->count();
-        }
-
-        return SupervisorInvitation::query()
-            ->forCurrentUniversity()
-            ->where('status', 'pending')
-            ->count();
+        return $this->invitationService->getSupervisorInvitations($user->id)->count();
     }
 }

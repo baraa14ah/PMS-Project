@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
+import { textEllipsisSx } from "../styles/textEllipsis";
 import PageHeader from "../components/PageHeader";
 import {
   headerActionBtnSx,
@@ -454,7 +455,7 @@ export default function PlatformDashboard() {
                           {univ.name?.charAt(0)?.toUpperCase() || "U"}
                         </Avatar>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography sx={{ fontWeight: 800 }} noWrap>
+                          <Typography sx={{ fontWeight: 800, ...textEllipsisSx }}>
                             {univ.name}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
@@ -544,11 +545,11 @@ export default function PlatformDashboard() {
                           {user.name?.charAt(0)?.toUpperCase() || "?"}
                         </Avatar>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography sx={{ fontWeight: 800 }} noWrap>
+                          <Typography sx={{ fontWeight: 800, ...textEllipsisSx }}>
                             {user.name}
                           </Typography>
                           <Stack direction="row" spacing={1} alignItems="center">
-                            <Typography variant="caption" color="text.secondary" noWrap>
+                            <Typography variant="caption" color="text.secondary" sx={textEllipsisSx}>
                               {user.email}
                             </Typography>
                             <Chip

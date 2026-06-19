@@ -11,17 +11,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Applied to Eloquent models; static calls resolve to {@see Model}.
  *
  * @mixin Model
+ * @method static void addGlobalScope(\Illuminate\Database\Eloquent\Scope|\Closure|string $scope, \Closure|string|null $implementation = null)
+ * @method static void creating(\Closure $callback)
  */
 trait BelongsToUniversity
 {
     /** Registers tenant scope and auto-fills university_id on create. */
     protected static function bootBelongsToUniversity(): void
     {
-        /** @var class-string<Model> $modelClass */
-        $modelClass = static::class;
-        $modelClass::addGlobalScope(new TenantScope);
+        static::addGlobalScope(new TenantScope);
 
-        $modelClass::creating(function (Model $model) {
+        static::creating(function (Model $model) {
             if (auth()->check() && empty($model->university_id)) {
                 $model->university_id = auth()->user()->university_id;
             }

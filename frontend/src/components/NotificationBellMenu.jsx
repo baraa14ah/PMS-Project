@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import NotificationsRoundedIcon from "@mui/icons-material/NotificationsRounded";
 import { useLanguage } from "../context/LanguageContext";
+import { textEllipsisSx } from "../styles/textEllipsis";
 import DoneAllRoundedIcon from "@mui/icons-material/DoneAllRounded";
 import {
   parseNotification,
@@ -255,7 +256,7 @@ export default function NotificationBellMenu({
                     justifyContent="space-between"
                     spacing={1}
                   >
-                    <Typography sx={{ fontWeight: 800, fontSize: 13 }} noWrap>
+                    <Typography sx={{ fontWeight: 800, fontSize: 13, ...textEllipsisSx }}>
                       {title}
                     </Typography>
                     <Typography

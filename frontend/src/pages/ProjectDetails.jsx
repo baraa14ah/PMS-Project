@@ -14,6 +14,7 @@ import ProjectInfoCard from "./ProjectDetails/ProjectInfoCard";
 import ProjectCharts from "./ProjectDetails/ProjectCharts";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
+import { textEllipsisSx } from "../styles/textEllipsis";
 import ProjectTimeline from "./ProjectDetails/ProjectTimeline";
 
 import toast from "react-hot-toast";
@@ -521,8 +522,8 @@ export default function ProjectDetails() {
                   fontWeight: 900,
                   lineHeight: 1.2,
                   fontSize: { xs: "1.15rem", md: "1.35rem" },
+                  ...textEllipsisSx,
                 }}
-                noWrap
               >
                 {project.title}
               </Typography>

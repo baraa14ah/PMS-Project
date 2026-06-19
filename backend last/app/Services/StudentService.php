@@ -4,36 +4,13 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Models\Project;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class StudentService
 {
-    /** Returns the project owner and accepted member list. */
-    public function getProjectMembers($projectId)
-    {
-        $project = Project::query()->with(['user:id,name,email'])->whereKey($projectId)->first();
-        if (!$project) {
-            return null;
-        }
-
-        $memberIds = DB::table('project_members')
-            ->where('project_id', $projectId)
-            ->where('status', 'accepted')
-            ->pluck('student_id');
-
-        $members = User::query()
-            ->whereIn('id', $memberIds)
-            ->select('id', 'name', 'email', 'university_id')
-            ->get();
-
-        return [
-            'owner' => $project->user,
-            'members' => $members,
-        ];
-    }
-
     /** Returns students eligible for invitation, excluding owner and current members. */
-    public function getAvailableStudents($projectId, $search = null)
+    public function getAvailableStudents(int $projectId, ?string $search = null): Collection
     {
         $project = Project::query()->whereKey($projectId)->first();
         if (!$project || !$project->university_id) {

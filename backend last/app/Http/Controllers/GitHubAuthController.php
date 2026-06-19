@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\AbstractProvider;
 
 class GitHubAuthController extends Controller
 {
@@ -26,11 +27,9 @@ class GitHubAuthController extends Controller
             return redirect($this->frontendRedirect('error', $reason));
         }
 
-        $driver = Socialite::driver('github');
-
         $returnTo = $this->sanitizeReturnTo($request->query('return_to'));
 
-        return $driver
+        return $this->githubDriver()
             ->scopes(['repo'])
             ->stateless()
             ->with(['state' => $this->encodeOAuthState($user->id, $returnTo)])
@@ -41,9 +40,7 @@ class GitHubAuthController extends Controller
     public function callback(Request $request)
     {
         try {
-            $driver = Socialite::driver('github');
-
-            $githubUser = $driver->stateless()->user();
+            $githubUser = $this->githubDriver()->stateless()->user();
             [$userId, $returnTo] = $this->decodeOAuthState($request->state);
 
             $user = User::query()->whereKey($userId)->first();
@@ -86,6 +83,18 @@ class GitHubAuthController extends Controller
         $user->save();
 
         return response()->json(['message' => 'تم إلغاء ربط حساب GitHub بنجاح']);
+    }
+
+    /** Resolve the GitHub OAuth driver with OAuth2 helper methods (scopes, stateless, with). */
+    private function githubDriver(): AbstractProvider
+    {
+        $driver = Socialite::driver('github');
+
+        if (!$driver instanceof AbstractProvider) {
+            throw new \RuntimeException('GitHub Socialite driver must extend AbstractProvider.');
+        }
+
+        return $driver;
     }
 
     /** Build a frontend redirect URL with OAuth result query params. */

@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ListToolbar from "../components/ListToolbar";
 import { btnPrimarySx } from "../styles/dashboardUi";
+import { textEllipsisSx } from "../styles/textEllipsis";
 
 import {
   Box,
@@ -823,7 +824,7 @@ export default function Users() {
                           : "—"}
                       </TableCell>
                       <TableCell sx={{ maxWidth: 200 }}>
-                        <Typography variant="body2" noWrap title={req.message}>
+                        <Typography variant="body2" sx={textEllipsisSx} title={req.message}>
                           {req.message || "—"}
                         </Typography>
                       </TableCell>
@@ -951,7 +952,7 @@ export default function Users() {
                     <TableCell sx={{ color: "text.secondary", maxWidth: 220 }}>
                       <Typography
                         variant="body2"
-                        noWrap
+                        sx={textEllipsisSx}
                         title={universityLabel(u)}
                       >
                         {universityLabel(u)}
