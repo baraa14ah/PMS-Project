@@ -4,6 +4,9 @@
 # ─── تجاهل كل شيء في الجذر، ثم استثناء مجلدي التشغيل ───
 /*
 !/.gitignore
+!/SETUP.md
+!/docs/
+!/docs/**
 !/frontend/
 !/frontend/**
 !/backend last/
